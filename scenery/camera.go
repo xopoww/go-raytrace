@@ -26,7 +26,7 @@ type Camera struct {
 }
 
 func NewCamera(width, height int) Camera {
-	return Camera{
+	cam := Camera{
 		Position: mgl.Vec3{3.0, 2.0, 7.0},
 		Lookat:   mgl.Vec3{0.0, 0.5, 0.0},
 		Up:       mgl.Vec3{0.0, 1.0, 0.0},
@@ -40,6 +40,28 @@ func NewCamera(width, height int) Camera {
 		deltaY: 0,
 		deltaZ: 0,
 	}
+	cam.fixValues()
+	return cam
+}
+
+// check if all fields of the struct are valid and fix if not
+// TODO: maybe fix this somehow else
+func (cam *Camera) fixValues() {
+	forward := cam.forward()
+	// remove Up's projection on forward so they're prependicular
+	cam.Up = cam.Up.Sub(forward.Mul(forward.Dot(cam.Up)))
+}
+
+// Camera.Forward(), Camera.Up and Camera.Right() create the right
+// orthonormal basis associated with the camera
+func (cam *Camera) forward() mgl.Vec3 {
+	return cam.Lookat.Sub(cam.Position).Normalize()
+}
+
+// Camera.Forward(), Camera.Up and Camera.Right() create the right
+// orthonormal basis associated with the camera
+func (cam *Camera) right() mgl.Vec3 {
+	return cam.forward().Cross(cam.Up).Normalize()
 }
 
 func (cam *Camera) GetUniformLocations(program uint32) {
@@ -74,8 +96,8 @@ func (cam *Camera) SetUniforms() error {
 	}
 
 	var cameraRays [2][2]mgl.Vec3
-	forward := cam.Lookat.Sub(cam.Position).Normalize()
-	right := forward.Cross(cam.Up).Normalize()
+	forward := cam.forward()
+	right := cam.right()
 	tanPhi := float32(math.Tan(float64(mgl.DegToRad(cam.FOV / 2))))
 	deltaX := right.Mul(forward.Len() * tanPhi)
 	deltaY := cam.Up.Normalize().Mul(forward.Len() / cam.Ratio * tanPhi)
@@ -128,7 +150,7 @@ func (cam *Camera) KeyCallback() glfw.KeyCallback {
 }
 
 func (cam *Camera) Update() {
-	deltaVec := mgl.Vec3{cam.deltaX, cam.deltaY, cam.deltaZ}
+	deltaVec := cam.forward().Mul(cam.deltaX).Add(cam.right().Mul(cam.deltaZ)).Add(cam.Up.Mul(cam.deltaY))
 	cam.Position = cam.Position.Add(deltaVec)
 	cam.Lookat = cam.Lookat.Add(deltaVec)
 }
