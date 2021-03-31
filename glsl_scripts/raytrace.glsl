@@ -9,7 +9,7 @@ uniform vec3 ray10;
 uniform vec3 ray01;
 uniform vec3 ray11;
 
-
+// body structs definition
 struct box {
   vec3 min;
   vec3 max;
@@ -20,12 +20,11 @@ struct ball {
   float radius;
 };
 
+// body instances declaration
 #define NUM_BOXES 2
 const box boxes[] = {
-  /* The ground */
-  {vec3(-5.0, -0.1, -5.0), vec3(5.0, 0.0, 5.0)},
-  /* Box in the middle */
-  {vec3(-0.5, 0.0, -0.5), vec3(0.5, 1.0, 0.5)}
+  {vec3(-5.0, -0.1, -5.0), vec3(5.0, 0.0, 5.0)}, // floor
+  {vec3(-0.5, 0.0, -0.5), vec3(0.5, 1.0, 0.5)}   // cube
 };
 
 #define NUM_BALLS 1
@@ -33,7 +32,10 @@ const ball balls[] = {
   {vec3(-2.0, 0.7, 1), 0.7}
 };
 
+#define NUM_OBJECTS NUM_BOXES + NUM_BALLS
 
+
+// body intersection functions
 vec2 intersectBox(vec3 origin, vec3 dir, const box b) {
   vec3 tMin = (b.min - origin) / dir;
   vec3 tMax = (b.max - origin) / dir;
@@ -69,6 +71,7 @@ vec2 intersectBall(vec3 origin, vec3 dir, const ball b) {
 }
 
 
+// global intersection function
 #define MAX_SCENE_BOUNDS 1000.0
 
 struct hitinfo {
@@ -101,13 +104,27 @@ bool intersectObjects(vec3 origin, vec3 dir, out hitinfo info) {
 }
 
 
+// materials
+const vec3 colors[NUM_OBJECTS] = {
+  {1.0, 1.0, 1.0},
+  {1.0, 0.2, 0.2},
+  {0.3, 1.0, 0.3}
+};
+
+
+// main tracing function
+vec4 bg_color(vec3 origin, vec3 dir) {
+  float brightness = dir.y / length(dir);
+  return vec4(vec3(brightness).xyz, 1.0);
+}
+
 vec4 trace(vec3 origin, vec3 dir) {
   hitinfo i;
   if (intersectObjects(origin, dir, i)) {
-    vec4 gray = vec4(i.oi / 10.0 + 0.6);
-    return vec4(gray.rgb, 1.0);
+    vec3 color = colors[i.oi];
+    return vec4(color.xyz, 1.0);
   }
-  return vec4(0.0, 0.0, 0.0, 1.0);
+  return bg_color(origin, dir);
 }
 
 
