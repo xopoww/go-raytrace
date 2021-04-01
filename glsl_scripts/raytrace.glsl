@@ -1,6 +1,7 @@
 #version 460 core
 
-// global compute shader params
+
+// ===== Global compute shader params
 
 layout(binding = 0, rgba32f) uniform image2D framebuffer;
 layout (local_size_x = 1, local_size_y = 1) in;
@@ -10,9 +11,65 @@ ivec2 size = imageSize(framebuffer);
 
 uniform float u_time;
 
+uniform uint MAX_DEPTH = 7;
+uniform uint ANTI_ALIASING = 4; 
+
+
+// ===== Helper structs and functions
+
 #define FLOAT_DELTA 0.0001
 
-// rng
+// floating point equality test
+bool fleq(const float f1, const float f2) {
+  return abs(f1 - f2) < FLOAT_DELTA;
+}
+
+// element-wise minimum of the vector
+float elmin(vec3 a) {
+  return min(a.x, min(a.y, a.z));
+}
+
+int argmin(vec3 a) {
+  float m = elmin(a);
+  if (a.x == m) {
+    return 0;
+  }
+  if (a.y == m) {
+    return 1;
+  }
+  return 2;
+}
+
+vec2 solve_quadratic(float a, float b, float c) {
+  if (a == 0.0) {
+    float k = -b / c;
+    return vec2(k, k);
+  }
+  float D2 = b * b - 4 * a * c;
+  if (D2 < 0.0) {
+    return vec2(1.0 / 0.0, 1.0 / 0.0);
+  }
+  float x = -b / 2.0 / a;
+  if (D2 == 0.0) {
+    return vec2(x, x);
+  }
+  float delta = sqrt(D2) / 2.0 / a;
+  return vec2(x - delta, x + delta);
+}
+
+// for debug
+vec3 color_from_normal(vec3 normal) {
+  vec3 sc = normalize(normal);
+  return abs(sc);
+}
+
+struct ray3 {
+  vec3 origin;
+  vec3 dir;
+};
+
+
+// ===== Pseudo-random numbers generation
 
 // these functions are copied from
 // https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
@@ -48,6 +105,7 @@ uniform float u_time;
 
 // ^^^^^^^^^^^^^^^^
 uint _hash_seed = 0;
+
 float random() {
   float f = floatConstruct(hash(uvec4(_hash_seed, pix.xy, floatBitsToUint(u_time))));
   _hash_seed++;
@@ -62,14 +120,18 @@ vec3 random_in_unit_sphere() {
   return v;
 }
 
-// The camera specification
+
+// ===== The camera specification
+
 uniform vec3 eye;
 uniform vec3 ray00;
 uniform vec3 ray10;
 uniform vec3 ray01;
 uniform vec3 ray11;
 
-// body structs definition
+
+// ===== Body structs definition
+
 struct box {
   vec3 min;
   vec3 max;
@@ -80,15 +142,17 @@ struct ball {
   float radius;
 };
 
-// body instances declaration
+
+// ===== Body instances declaration
+
 #define NUM_BOXES 2
-const box boxes[] = {
+const box boxes[NUM_BOXES] = {
   {vec3(-5.0, -0.5, -5.0), vec3(5.0, 0.0, 5.0)}, // floor
   {vec3(-0.5, 0.0, -1.0), vec3(0.5, 1.0, 0)}   // cube
 };
 
 #define NUM_BALLS 2
-const ball balls[] = {
+const ball balls[NUM_BALLS] = {
   {vec3(-2.0, 0.7, 1), 0.7},
   {vec3(0.0, 0.3, 0.4), 0.3}
 };
@@ -96,8 +160,9 @@ const ball balls[] = {
 #define NUM_OBJECTS NUM_BOXES + NUM_BALLS
 
 
-// body intersection functions
-vec2 intersectBox(vec3 origin, vec3 dir, const box b) {
+// ===== Body intersection functions
+
+vec2 _intersectBox(vec3 origin, vec3 dir, const box b) {
   vec3 tMin = (b.min - origin) / dir;
   vec3 tMax = (b.max - origin) / dir;
   vec3 t1 = min(tMin, tMax);
@@ -107,22 +172,7 @@ vec2 intersectBox(vec3 origin, vec3 dir, const box b) {
   return vec2(tNear, tFar);
 }
 
-float elmin(vec3 a) {
-  return min(a.x, min(a.y, a.z));
-}
-
-int argmin(vec3 a) {
-  float m = elmin(a);
-  if (a.x == m) {
-    return 0;
-  }
-  if (a.y == m) {
-    return 1;
-  }
-  return 2;
-}
-
-vec3 normalBox(vec3 point, const box b) {
+vec3 _normalBox(vec3 point, const box b) {
   vec3 dMin = abs(point - b.min);
   vec3 dMax = abs(point - b.max);
   vec3 norm, mask = vec3(0.0);
@@ -148,36 +198,20 @@ vec3 normalBox(vec3 point, const box b) {
   return norm * mask;
 }
 
-vec2 solve_quadratic(float a, float b, float c) {
-  if (a == 0.0) {
-    float k = -b / c;
-    return vec2(k, k);
-  }
-  float D2 = b * b - 4 * a * c;
-  if (D2 < 0.0) {
-    return vec2(1.0 / 0.0, 1.0 / 0.0);
-  }
-  float x = -b / 2.0 / a;
-  if (D2 == 0.0) {
-    return vec2(x, x);
-  }
-  float delta = sqrt(D2) / 2.0 / a;
-  return vec2(x - delta, x + delta);
-}
-
-vec2 intersectBall(vec3 origin, vec3 dir, const ball b) {
+vec2 _intersectBall(vec3 origin, vec3 dir, const ball b) {
   float c1 = pow(length(dir), 2);
   float c2 = 2.0 * dot(origin - b.center, dir);
   float c3 = pow(length(origin - b.center), 2) - pow(b.radius, 2);
   return solve_quadratic(c1, c2, c3);
 }
 
-vec3 normalBall(vec3 point, const ball b) {
+vec3 _normalBall(vec3 point, const ball b) {
   return normalize(point - b.center);
 }
 
 
-// global intersection function
+// ==== Global intersection function
+
 #define MAX_SCENE_BOUNDS 1000.0
 
 struct hitinfo {
@@ -188,8 +222,9 @@ struct hitinfo {
 bool intersectObjects(vec3 origin, vec3 dir, out hitinfo info) {
   float smallest = MAX_SCENE_BOUNDS;
   bool found = false;
+  // handle boxes
   for (int i = 0; i < NUM_BOXES; i++) {
-    vec2 lambda = intersectBox(origin, dir, boxes[i]);
+    vec2 lambda = _intersectBox(origin, dir, boxes[i]);
     if (lambda.x > 0.0 && lambda.x < lambda.y && lambda.x < smallest) {
       info.lambda = lambda;
       info.oi = i;
@@ -197,8 +232,9 @@ bool intersectObjects(vec3 origin, vec3 dir, out hitinfo info) {
       found = true;
     }
   }
+  // handle balls
   for (int i = 0; i < NUM_BALLS; i++) {
-    vec2 lambda = intersectBall(origin, dir, balls[i]);
+    vec2 lambda = _intersectBall(origin, dir, balls[i]);
     if (lambda.x > 0.0 && lambda.x < lambda.y && lambda.x < smallest) {
       info.lambda = lambda;
       info.oi = i + NUM_BOXES;
@@ -211,20 +247,15 @@ bool intersectObjects(vec3 origin, vec3 dir, out hitinfo info) {
 
 vec3 normalObject(vec3 point, int oi) {
   if (oi < NUM_BOXES) {
-    return normalBox(point, boxes[oi]);
+    return _normalBox(point, boxes[oi]);
   } else {
-    return normalBall(point, balls[oi - NUM_BOXES]);
+    return _normalBall(point, balls[oi - NUM_BOXES]);
   }
 }
 
 
-// for debug
-vec3 color_from_normal(vec3 normal) {
-  vec3 sc = normalize(normal);
-  return abs(sc);
-}
+// ==== Materials
 
-// materials
 const vec3 colors[NUM_OBJECTS] = {
   {0.3, 0.3, 0.3},
   {1.0, 0.2, 0.2},
@@ -249,13 +280,13 @@ const uint materials[] = {
   LambertianMaterial
 };
 
-vec3 scatterMirror(vec3 incident, vec3 normal, float fuzz) {
+vec3 _scatterMirror(vec3 incident, vec3 normal, float fuzz) {
   return reflect(incident, normal) + random_in_unit_sphere() * fuzz;
 }
 
-vec3 scatterLambertian(vec3 normal) {
+vec3 _scatterLambertian(vec3 normal) {
   vec3 scattered = normal + random_in_unit_sphere();
-  if (length(scattered) < FLOAT_DELTA) {
+  if (fleq(length(scattered), 0.0)) {
     scattered = normal;
   }
   return scattered;
@@ -264,25 +295,22 @@ vec3 scatterLambertian(vec3 normal) {
 vec3 scatter(vec3 incident, vec3 normal, int oi) {
   switch (materials[oi]) {
   case MirrorMaterial:
-    return scatterMirror(incident, normal, fuzzs[oi]);
+    return _scatterMirror(incident, normal, fuzzs[oi]);
   case LambertianMaterial:
-    return scatterLambertian(normal);
+    return _scatterLambertian(normal);
+  default:
+    return vec3(0.0);
   }
 }
 
-// main tracing function
+
+// ===== Main tracing functions
+
 vec3 bg_color(vec3 origin, vec3 dir) {
   float brightness = (dir.y / length(dir) + 1.0) / 2.0;
   return vec3(brightness);
 }
 
-#define MAX_DEPTH 7
-#define ANTI_ALIASING 4 
-
-struct ray3 {
-  vec3 origin;
-  vec3 dir;
-};
 
 ray3 trace_step(ray3 r, out vec3 color) {
   hitinfo i;
@@ -291,10 +319,14 @@ ray3 trace_step(ray3 r, out vec3 color) {
     vec3 normal = normalObject(point, i.oi);
     color = colors[i.oi];
     vec3 scattered = scatter(r.dir, normal, i.oi);
+    if (fleq(length(scattered), 0.0)) {
+      color = vec3(0.0);
+      return ray3(vec3(0.0), vec3(0.0));
+    }
     return ray3(point, normalize(scattered));
   }
   color = bg_color(r.origin, r.dir);
-  return ray3(vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0));
+  return ray3(vec3(0.0), vec3(0.0));
 }
 
 vec3 trace_ray(ray3 ray) {
@@ -306,12 +338,15 @@ vec3 trace_ray(ray3 ray) {
     vec3 color;
     ray = trace_step(ray, color);
     resulting_color *= color;
-    if (length(ray.dir) < FLOAT_DELTA) {
+    if (fleq(length(ray.dir), 0.0)) {
       break;
     }
   }
   return resulting_color;
 }
+
+
+// ===== Main
 
 void main(void) {
   if (pix.x >= size.x || pix.y >= size.y) {
