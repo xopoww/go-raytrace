@@ -7,6 +7,8 @@ import (
 	"github.com/go-gl/gl/v4.6-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	mgl "github.com/go-gl/mathgl/mgl32"
+
+	"github.com/xopoww/go-raytrace/app"
 )
 
 type Camera struct {
@@ -20,33 +22,24 @@ type Camera struct {
 	UniformEye  int32
 	UniformRays [2][2]int32
 
-	deltaX float32
-	deltaY float32
-	deltaZ float32
-
-	// deltaLookX float32
-	// deltaLookY float32
-	// deltaLookZ float32
+	moveUp    bool
+	moveDown  bool
+	moveLeft  bool
+	moveRight bool
+	moveFor   bool
+	moveBack  bool
 }
 
 func NewCamera(width, height int) Camera {
 	cam := Camera{
 		Position: mgl.Vec3{3.0, 2.0, 7.0},
-		Lookat:   mgl.Vec3{0.0, 0.5, 0.0},
+		Lookat:   mgl.Vec3{-2.0, 0.5, 0.0},
 		Up:       mgl.Vec3{0.0, 1.0, 0.0},
 		FOV:      120.0,
 		Ratio:    float32(width) / float32(height),
 
 		UniformEye:  -1,
 		UniformRays: [2][2]int32{{-1, -1}, {-1, -1}},
-
-		deltaX: 0,
-		deltaY: 0,
-		deltaZ: 0,
-
-		// deltaLookX: 0,
-		// deltaLookY: 0,
-		// deltaLookZ: 0,
 	}
 	cam.fixValues()
 	return cam
@@ -135,53 +128,43 @@ func (cam *Camera) SetUniforms() error {
 	return nil
 }
 
-func (cam *Camera) KeyCallback() glfw.KeyCallback {
-	return func(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
-		var delta float32
-		if action == glfw.Press {
-			delta = 0.2
-		} else {
-			delta = 0
-		}
-
-		switch key {
-		case glfw.KeyW:
-			cam.deltaX = +delta
-		case glfw.KeyS:
-			cam.deltaX = -delta
-		case glfw.KeyD:
-			cam.deltaZ = +delta
-		case glfw.KeyA:
-			cam.deltaZ = -delta
-		case glfw.KeySpace:
-			cam.deltaY = +delta
-		case glfw.KeyLeftShift:
-			cam.deltaY = -delta
-
-			// case glfw.KeyKP8:
-			// 	cam.deltaLookY = +delta
-			// case glfw.KeyKP2:
-			// 	cam.deltaLookY = -delta
-			// case glfw.KeyKP6:
-			// 	cam.deltaLookZ = +delta
-			// case glfw.KeyKP4:
-			// 	cam.deltaLookZ = -delta
-		}
-	}
-}
+const cameraSpeed = 0.2
 
 func (cam *Camera) Update() {
-	deltaVec := cam.forward().Mul(cam.deltaX).Add(cam.right().Mul(cam.deltaZ)).Add(cam.Up.Mul(cam.deltaY))
+	var dX, dY, dZ float32
+
+	if cam.moveUp {
+		dY += cameraSpeed
+	}
+	if cam.moveDown {
+		dY -= cameraSpeed
+	}
+	if cam.moveRight {
+		dZ += cameraSpeed
+	}
+	if cam.moveLeft {
+		dZ -= cameraSpeed
+	}
+	if cam.moveFor {
+		dX += cameraSpeed
+	}
+	if cam.moveBack {
+		dX -= cameraSpeed
+	}
+
+	deltaVec := cam.forward().Mul(dX).Add(cam.right().Mul(dZ)).Add(cam.Up.Mul(dY))
+
 	if deltaVec.Len() > 0.0 {
 		cam.Position = cam.Position.Add(deltaVec)
 		cam.Lookat = cam.Lookat.Add(deltaVec)
 	}
+}
 
-	// deltaLookVec := cam.forward().Mul(cam.deltaLookX).Add(cam.right().Mul(cam.deltaLookZ)).Add(cam.Up.Mul(cam.deltaLookY))
-	// if deltaLookVec.Len() > 0.0 {
-	// 	view_length := cam.Lookat.Sub(cam.Position).Len()
-	// 	cam.Lookat = cam.Lookat.Add(deltaLookVec).Sub(cam.Position).Normalize().Mul(view_length).Add(cam.Position)
-	// 	cam.Up = cam.Up.Add(deltaLookVec).Normalize()
-	// }
-
+func (cam *Camera) AttachToEventHandler(eh *app.EventHandler) {
+	eh.AddOption(glfw.KeyW, &cam.moveFor, app.Hold)
+	eh.AddOption(glfw.KeyS, &cam.moveBack, app.Hold)
+	eh.AddOption(glfw.KeyD, &cam.moveRight, app.Hold)
+	eh.AddOption(glfw.KeyA, &cam.moveLeft, app.Hold)
+	eh.AddOption(glfw.KeySpace, &cam.moveUp, app.Hold)
+	eh.AddOption(glfw.KeyLeftShift, &cam.moveDown, app.Hold)
 }

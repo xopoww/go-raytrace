@@ -7,6 +7,7 @@ import (
 	"github.com/go-gl/gl/v4.6-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
 
+	"github.com/xopoww/go-raytrace/app"
 	"github.com/xopoww/go-raytrace/glutils"
 	"github.com/xopoww/go-raytrace/scenery"
 )
@@ -90,9 +91,13 @@ func main() {
 	}
 	log.Println("Created the quad program")
 
+	// Init the event handler
+	eventHandler := app.NewEventHandler()
+	window.SetKeyCallback(eventHandler.KeyCallback())
+
 	// Init the camera
 	camera := scenery.NewCamera(WIDTH, HEIGHT)
-	window.SetKeyCallback(camera.KeyCallback())
+	camera.AttachToEventHandler(eventHandler)
 
 	// Init OpenGL objects
 	vao := glutils.MakeVao(quad)
