@@ -258,26 +258,34 @@ vec3 normalObject(vec3 point, int oi) {
 
 const vec3 colors[NUM_OBJECTS] = {
   {0.3, 0.3, 0.3},
-  {1.0, 0.2, 0.2},
+  {1.0, 0.7, 0.7},
   {0.3, 1.0, 0.3},
-  {0.6, 0.6, 0.8}
+  {0.8, 0.8, 1.0}
 };
 
 const float fuzzs[NUM_OBJECTS] = {
   0.0,
-  0.2,
+  0.0,
   0.05,
-  0.0
+  0.05
+};
+
+const float etas[NUM_OBJECTS] = {
+  0.0,
+  1.5,
+  0.0,
+  1.2
 };
 
 const uint MirrorMaterial     = 0x00000001u;
 const uint LambertianMaterial = 0x00000002u;
+const uint GlassMaterial      = 0x00000003u;
 
-const uint materials[] = {
+const uint materials[NUM_OBJECTS] = {
   LambertianMaterial,
+  GlassMaterial,
   MirrorMaterial,
-  MirrorMaterial,
-  LambertianMaterial
+  GlassMaterial
 };
 
 vec3 _scatterMirror(vec3 incident, vec3 normal, float fuzz) {
@@ -292,12 +300,27 @@ vec3 _scatterLambertian(vec3 normal) {
   return scattered;
 }
 
+vec3 _scatterGlass(vec3 incident, vec3 normal, float fuzz, float eta) {
+  vec3 scattered = refract(normalize(incident), normal, 1.0 / eta);
+  if (fleq(length(scattered), 0.0)) {
+    scattered = reflect(incident, normal);
+  }
+  return scattered + random_in_unit_sphere() * fuzz;
+}
+
 vec3 scatter(vec3 incident, vec3 normal, int oi) {
   switch (materials[oi]) {
   case MirrorMaterial:
     return _scatterMirror(incident, normal, fuzzs[oi]);
   case LambertianMaterial:
     return _scatterLambertian(normal);
+  case GlassMaterial:
+    float eta = etas[oi];
+    if (dot(incident, normal) > 0.0) {
+      normal *= -1.0;
+      eta = 1.0 / eta;
+    }
+    return _scatterGlass(incident, normal, fuzzs[oi], eta);
   default:
     return vec3(0.0);
   }
