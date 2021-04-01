@@ -23,6 +23,10 @@ type Camera struct {
 	deltaX float32
 	deltaY float32
 	deltaZ float32
+
+	// deltaLookX float32
+	// deltaLookY float32
+	// deltaLookZ float32
 }
 
 func NewCamera(width, height int) Camera {
@@ -39,6 +43,10 @@ func NewCamera(width, height int) Camera {
 		deltaX: 0,
 		deltaY: 0,
 		deltaZ: 0,
+
+		// deltaLookX: 0,
+		// deltaLookY: 0,
+		// deltaLookZ: 0,
 	}
 	cam.fixValues()
 	return cam
@@ -145,12 +153,35 @@ func (cam *Camera) KeyCallback() glfw.KeyCallback {
 			cam.deltaZ = +delta
 		case glfw.KeyA:
 			cam.deltaZ = -delta
+		case glfw.KeySpace:
+			cam.deltaY = +delta
+		case glfw.KeyLeftShift:
+			cam.deltaY = -delta
+
+			// case glfw.KeyKP8:
+			// 	cam.deltaLookY = +delta
+			// case glfw.KeyKP2:
+			// 	cam.deltaLookY = -delta
+			// case glfw.KeyKP6:
+			// 	cam.deltaLookZ = +delta
+			// case glfw.KeyKP4:
+			// 	cam.deltaLookZ = -delta
 		}
 	}
 }
 
 func (cam *Camera) Update() {
 	deltaVec := cam.forward().Mul(cam.deltaX).Add(cam.right().Mul(cam.deltaZ)).Add(cam.Up.Mul(cam.deltaY))
-	cam.Position = cam.Position.Add(deltaVec)
-	cam.Lookat = cam.Lookat.Add(deltaVec)
+	if deltaVec.Len() > 0.0 {
+		cam.Position = cam.Position.Add(deltaVec)
+		cam.Lookat = cam.Lookat.Add(deltaVec)
+	}
+
+	// deltaLookVec := cam.forward().Mul(cam.deltaLookX).Add(cam.right().Mul(cam.deltaLookZ)).Add(cam.Up.Mul(cam.deltaLookY))
+	// if deltaLookVec.Len() > 0.0 {
+	// 	view_length := cam.Lookat.Sub(cam.Position).Len()
+	// 	cam.Lookat = cam.Lookat.Add(deltaLookVec).Sub(cam.Position).Normalize().Mul(view_length).Add(cam.Position)
+	// 	cam.Up = cam.Up.Add(deltaLookVec).Normalize()
+	// }
+
 }
