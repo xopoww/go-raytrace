@@ -40,9 +40,11 @@ func (eh *EventHandler) KeyCallback() glfw.KeyCallback {
 
 		switch option.kind {
 		case Switch:
-			*option.value = !*option.value
+			if action == glfw.Press {
+				*option.value = !*option.value
+			}
 		case Hold:
-			*option.value = (action == glfw.Press)
+			*option.value = (action != glfw.Release)
 		}
 	}
 }

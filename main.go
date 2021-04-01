@@ -1,8 +1,12 @@
 package main
 
 import (
+	"fmt"
+	"image/png"
 	"log"
+	"os"
 	"runtime"
+	"time"
 
 	"github.com/go-gl/gl/v4.6-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -95,6 +99,10 @@ func main() {
 	eventHandler := app.NewEventHandler()
 	window.SetKeyCallback(eventHandler.KeyCallback())
 
+	// Init screenshot handling
+	screenshotRequested := false
+	eventHandler.AddOption(glfw.KeyF3, &screenshotRequested, app.Switch)
+
 	// Init the camera
 	camera := scenery.NewCamera(WIDTH, HEIGHT)
 	camera.AttachToEventHandler(eventHandler)
@@ -140,6 +148,45 @@ func main() {
 		gl.DrawArrays(gl.TRIANGLES, 0, int32(len(quad)/3))
 		gl.BindTexture(gl.TEXTURE_2D, 0)
 		gl.UseProgram(0)
+
+		// Check for errors
+		if err := glutils.CheckError(); err != nil {
+			log.Fatalf("Fatal error occured: %s", err)
+		}
+
+		// Handle screenshot request
+		if screenshotRequested {
+			screenshotRequested = false
+
+			img, err := glutils.GetImage(texture, WIDTH, HEIGHT)
+			if err != nil {
+				log.Printf("Failed to take a screenshot: %s", err)
+			} else {
+				go func() {
+					flippedImg := glutils.FlipImage(img)
+
+					filename := fmt.Sprintf(
+						"screenshot_%s.png",
+						time.Now().Format("02-01-2006_15:04:05"),
+					)
+
+					file, err := os.Create(filename)
+					if err != nil {
+						log.Printf("Failed to save a screenshot: %s", err)
+						return
+					}
+					defer file.Close()
+
+					err = png.Encode(file, flippedImg)
+					if err != nil {
+						log.Printf("Failed to save a screenshot: %s", err)
+						return
+					}
+
+					log.Printf("Saved a screenshot as %q", filename)
+				}()
+			}
+		}
 
 		window.SwapBuffers()
 		glfw.PollEvents()
