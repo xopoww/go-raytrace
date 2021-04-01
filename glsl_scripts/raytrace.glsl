@@ -1,7 +1,66 @@
 #version 460 core
 
-layout(binding = 0, rgba32f) uniform image2D framebuffer;
+// global compute shader params
 
+layout(binding = 0, rgba32f) uniform image2D framebuffer;
+layout (local_size_x = 1, local_size_y = 1) in;
+
+ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+ivec2 size = imageSize(framebuffer);
+
+uniform float u_time;
+
+#define FLOAT_DELTA 0.0001
+
+// rng
+
+// these functions are copied from
+// https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
+// vvvvvvvvvvvvvvvv
+
+  // A single iteration of Bob Jenkins' One-At-A-Time hashing algorithm.
+  uint hash( uint x ) {
+      x += ( x << 10u );
+      x ^= ( x >>  6u );
+      x += ( x <<  3u );
+      x ^= ( x >> 11u );
+      x += ( x << 15u );
+      return x;
+  }
+
+  // Compound versions of the hashing algorithm I whipped together.
+  uint hash( uvec2 v ) { return hash( v.x ^ hash(v.y)                         ); }
+  uint hash( uvec3 v ) { return hash( v.x ^ hash(v.y) ^ hash(v.z)             ); }
+  uint hash( uvec4 v ) { return hash( v.x ^ hash(v.y) ^ hash(v.z) ^ hash(v.w) ); }
+
+  // Construct a float with half-open range [0:1] using low 23 bits.
+  // All zeroes yields 0.0, all ones yields the next smallest representable value below 1.0.
+  float floatConstruct( uint m ) {
+      const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+      const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+
+      m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
+      m |= ieeeOne;                          // Add fractional part to 1.0
+
+      float  f = uintBitsToFloat( m );       // Range [1:2]
+      return f - 1.0;                        // Range [0:1]
+  }
+
+// ^^^^^^^^^^^^^^^^
+uint _hash_seed = 0;
+float random() {
+  float f = floatConstruct(hash(uvec4(_hash_seed, pix.xy, floatBitsToUint(u_time))));
+  _hash_seed++;
+  return f;
+}
+
+vec3 random_in_unit_sphere() {
+  vec3 v;
+  do {
+    v = vec3(random(), random(), random()) * 2.0 - 1.0;
+  } while (length(v) > 1.0);
+  return v;
+}
 
 // The camera specification
 uniform vec3 eye;
@@ -25,12 +84,13 @@ struct ball {
 #define NUM_BOXES 2
 const box boxes[] = {
   {vec3(-5.0, -0.5, -5.0), vec3(5.0, 0.0, 5.0)}, // floor
-  {vec3(-0.5, 0.0, -0.5), vec3(0.5, 1.0, 0.5)}   // cube
+  {vec3(-0.5, 0.0, -1.0), vec3(0.5, 1.0, 0)}   // cube
 };
 
-#define NUM_BALLS 1
+#define NUM_BALLS 2
 const ball balls[] = {
-  {vec3(-2.0, 0.7, 1), 0.7}
+  {vec3(-2.0, 0.7, 1), 0.7},
+  {vec3(0.0, 0.3, 0.4), 0.3}
 };
 
 #define NUM_OBJECTS NUM_BOXES + NUM_BALLS
@@ -165,16 +225,49 @@ vec3 color_from_normal(vec3 normal) {
 }
 
 // materials
-const vec3 colors[] = {
-  {0.8, 0.8, 0.4},
+const vec3 colors[NUM_OBJECTS] = {
+  {0.3, 0.3, 0.3},
   {1.0, 0.2, 0.2},
-  {0.3, 1.0, 0.3}
+  {0.3, 1.0, 0.3},
+  {0.6, 0.6, 0.8}
 };
 
-const uint MirrorMaterial = 0x00000001u;
+const float fuzzs[NUM_OBJECTS] = {
+  0.0,
+  0.2,
+  0.05,
+  0.0
+};
 
-vec3 scatterMirror(vec3 incident, vec3 normal) {
-  return incident + 2.0 * normal * abs(dot(incident, normal));
+const uint MirrorMaterial     = 0x00000001u;
+const uint LambertianMaterial = 0x00000002u;
+
+const uint materials[] = {
+  LambertianMaterial,
+  MirrorMaterial,
+  MirrorMaterial,
+  LambertianMaterial
+};
+
+vec3 scatterMirror(vec3 incident, vec3 normal, float fuzz) {
+  return reflect(incident, normal) + random_in_unit_sphere() * fuzz;
+}
+
+vec3 scatterLambertian(vec3 normal) {
+  vec3 scattered = normal + random_in_unit_sphere();
+  if (length(scattered) < FLOAT_DELTA) {
+    scattered = normal;
+  }
+  return scattered;
+}
+
+vec3 scatter(vec3 incident, vec3 normal, int oi) {
+  switch (materials[oi]) {
+  case MirrorMaterial:
+    return scatterMirror(incident, normal, fuzzs[oi]);
+  case LambertianMaterial:
+    return scatterLambertian(normal);
+  }
 }
 
 // main tracing function
@@ -184,6 +277,7 @@ vec3 bg_color(vec3 origin, vec3 dir) {
 }
 
 #define MAX_DEPTH 7
+#define ANTI_ALIASING 4 
 
 struct ray3 {
   vec3 origin;
@@ -196,13 +290,14 @@ ray3 trace_step(ray3 r, out vec3 color) {
     vec3 point = r.origin + r.dir * i.lambda.x;
     vec3 normal = normalObject(point, i.oi);
     color = colors[i.oi];
-    return ray3(point, scatterMirror(r.dir, normal));
+    vec3 scattered = scatter(r.dir, normal, i.oi);
+    return ray3(point, normalize(scattered));
   }
   color = bg_color(r.origin, r.dir);
   return ray3(vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0));
 }
 
-vec3 trace(ray3 ray) {
+vec3 trace_ray(ray3 ray) {
   vec3 resulting_color = vec3(1.0);
   for (int i = 0; i <= MAX_DEPTH; i++) {
     if (i == MAX_DEPTH) {
@@ -211,26 +306,27 @@ vec3 trace(ray3 ray) {
     vec3 color;
     ray = trace_step(ray, color);
     resulting_color *= color;
-    if (length(ray.dir) < 0.001) {
+    if (length(ray.dir) < FLOAT_DELTA) {
       break;
     }
   }
   return resulting_color;
 }
 
-
-layout (local_size_x = 1, local_size_y = 1) in;
-
 void main(void) {
-  ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
-  ivec2 size = imageSize(framebuffer);
   if (pix.x >= size.x || pix.y >= size.y) {
     return;
   }
-  vec2 pos = vec2(pix) / vec2(size.x, size.y);
-  vec3 dir = mix(mix(ray00, ray01, pos.y), mix(ray10, ray11, pos.y), pos.x);
-  vec3 resulting_color = vec3(1.0);
-  ray3 ray = {eye, dir};
-  vec3 color = trace(ray);
-  imageStore(framebuffer, pix, vec4(color.xyz, 1.0));
+
+  vec3 resulting_color = vec3(0.0);
+  for (int i = 0; i < ANTI_ALIASING; i++) {
+    vec2 shift = vec2(random(), random());
+    vec2 pos = (vec2(pix) + shift) / vec2(size.x, size.y);
+    vec3 dir = mix(mix(ray00, ray01, pos.y), mix(ray10, ray11, pos.y), pos.x);
+
+    ray3 ray = {eye, dir};
+    vec3 color = trace_ray(ray);
+    resulting_color += color / float(ANTI_ALIASING);
+  }
+  imageStore(framebuffer, pix, vec4(resulting_color.xyz, 1.0));
 }
