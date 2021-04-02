@@ -122,6 +122,14 @@ vec3 random_in_unit_sphere() {
   return v;
 }
 
+vec2 random_in_unit_disk() {
+  vec2 v;
+  do {
+    v = vec2(random(), random()) * 2.0 - 1.0;
+  } while (length(v) > 1.0);
+  return v;
+}
+
 
 // ===== The camera specification
 
@@ -130,6 +138,8 @@ uniform vec3 ray00;
 uniform vec3 ray10;
 uniform vec3 ray01;
 uniform vec3 ray11;
+
+uniform float lens_radius;
 
 
 // ===== Body structs definition
@@ -398,6 +408,15 @@ vec3 trace_ray(ray3 ray) {
   return resulting_color;
 }
 
+ray3 get_ray(vec2 pos) {
+  vec2 eye_shift = random_in_unit_disk().xy * lens_radius;
+  vec3 h = normalize(ray11 - ray01);
+  vec3 v = normalize(ray11 - ray10);
+  vec3 offset = eye_shift.x * h + eye_shift.y * v;
+  vec3 dir = mix(mix(ray00 - offset, ray01- offset, pos.y), mix(ray10 - offset, ray11 - offset, pos.y), pos.x);
+  return ray3(eye + offset, dir);
+}
+
 
 // ===== Main
 
@@ -410,9 +429,7 @@ void main(void) {
   for (int i = 0; i < ANTI_ALIASING; i++) {
     vec2 shift = vec2(random(), random());
     vec2 pos = (vec2(pix) + shift) / vec2(size.x, size.y);
-    vec3 dir = mix(mix(ray00, ray01, pos.y), mix(ray10, ray11, pos.y), pos.x);
-
-    ray3 ray = {eye, dir};
+    ray3 ray = get_ray(pos);
     vec3 color = trace_ray(ray);
     resulting_color += color / float(ANTI_ALIASING);
   }

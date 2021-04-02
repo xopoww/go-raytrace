@@ -3,6 +3,8 @@ package scenery
 import (
 	"fmt"
 	"image/color"
+	"math"
+	"math/rand"
 
 	mgl "github.com/go-gl/mathgl/mgl32"
 )
@@ -82,7 +84,7 @@ func NewLambertian(c color.RGBA) Material {
 	}
 }
 
-func NewGlasss(c color.RGBA, fuzz, eta float32) Material {
+func NewGlass(c color.RGBA, fuzz, eta float32) Material {
 	return Material{
 		kind:  Glass,
 		color: c,
@@ -133,4 +135,60 @@ func NewBall(center mgl.Vec3, radius float32) Body {
 			radius,
 		),
 	}
+}
+
+const (
+	nObjects = 35
+	maxSize  = 5.0
+	minSize  = 0.5
+	maxDist  = 70.0
+)
+
+func RandomScene(seed int64) *Scene {
+	rand.Seed(seed)
+	s := NewScene()
+	s.AddObject(NewObject(
+		NewBox(
+			mgl.Vec3{-maxDist, -1.0, -maxDist},
+			mgl.Vec3{maxDist, 0.0, maxDist},
+		),
+		NewLambertian(
+			color.RGBA{0x44, 0x44, 0x44, 0xFF},
+		),
+	))
+	for i := 0; i < nObjects; i++ {
+		pos := mgl.Vec2{rand.Float32() - 0.5, rand.Float32() - 0.5}.Mul(maxDist * 2.0)
+		size := minSize + rand.Float32()*(maxSize-minSize)
+
+		var body Body
+		if rand.Int()%2 == 0 {
+			body = NewBox(
+				mgl.Vec3{pos.X() - size, 0.0, pos.Y() - size},
+				mgl.Vec3{pos.X() + size, 2.0 * size, pos.Y() + size},
+			)
+		} else {
+			body = NewBall(
+				mgl.Vec3{pos.X(), size, pos.Y()}, size,
+			)
+		}
+
+		clr := color.RGBA{
+			R: uint8(rand.Float32() * 0xFF),
+			G: uint8(rand.Float32() * 0xFF),
+			B: uint8(rand.Float32() * 0xFF),
+			A: 0xFF,
+		}
+		var material Material
+		switch rand.Int() % 3 {
+		case 0:
+			material = NewMirror(clr, rand.Float32())
+		case 1:
+			material = NewLambertian(clr)
+		case 2:
+			material = NewGlass(clr, float32(math.Pow(rand.Float64()*0.5, 3.0)), rand.Float32()/1.5+1.1)
+		}
+
+		s.AddObject(NewObject(body, material))
+	}
+	return s
 }

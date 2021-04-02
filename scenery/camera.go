@@ -20,8 +20,12 @@ type Camera struct {
 	// width / height
 	Ratio float32
 
-	UniformEye  int32
-	UniformRays [2][2]int32
+	Aperture  float32
+	FocalDist float32
+
+	UniformEye        int32
+	UniformRays       [2][2]int32
+	UniformLensRadius int32
 
 	moveUp    bool
 	moveDown  bool
@@ -36,6 +40,11 @@ type Camera struct {
 	rotRight bool
 	rotFor   bool // rotFor and rotBack are kind of misnomers as it is unclear what a "rotation forward" would be
 	rotBack  bool // they're used just for similarity with moveFor and moveBack
+
+	zoomIn     bool
+	zoomOut    bool
+	lensWide   bool
+	lensShrink bool
 }
 
 func NewCamera(width, height int) Camera {
@@ -45,6 +54,9 @@ func NewCamera(width, height int) Camera {
 		Up:       mgl.Vec3{0.0, 1.0, 0.0},
 		FOV:      120.0,
 		Ratio:    float32(width) / float32(height),
+
+		Aperture:  0.5,
+		FocalDist: 3.0,
 
 		UniformEye:  -1,
 		UniformRays: [2][2]int32{{-1, -1}, {-1, -1}},
@@ -84,6 +96,7 @@ func (cam *Camera) GetUniformLocations(program uint32) {
 		}
 	}
 	cam.UniformEye = glutils.MustGetUniformLocation(program, "eye")
+	cam.UniformLensRadius = glutils.MustGetUniformLocation(program, "lens_radius")
 }
 
 func (cam *Camera) SetUniforms() {
@@ -94,10 +107,13 @@ func (cam *Camera) SetUniforms() {
 	deltaX := right.Mul(forward.Len() * tanPhi)
 	deltaY := cam.Up.Normalize().Mul(forward.Len() / cam.Ratio * tanPhi)
 
-	cameraRays[0][0] = forward.Sub(deltaX).Sub(deltaY)
-	cameraRays[1][0] = forward.Add(deltaX).Sub(deltaY)
-	cameraRays[0][1] = forward.Sub(deltaX).Add(deltaY)
-	cameraRays[1][1] = forward.Add(deltaX).Add(deltaY)
+	// cosPhi := float32(math.Cos(float64(mgl.DegToRad(cam.FOV / 2))))
+	// rayLength := cam.FocalDist * float32(math.Sqrt(float64(1.0+cosPhi*cosPhi*(1.0+1.0/cam.Ratio/cam.Ratio))))
+
+	cameraRays[0][0] = forward.Sub(deltaX).Sub(deltaY).Normalize().Mul(cam.FocalDist)
+	cameraRays[1][0] = forward.Add(deltaX).Sub(deltaY).Normalize().Mul(cam.FocalDist)
+	cameraRays[0][1] = forward.Sub(deltaX).Add(deltaY).Normalize().Mul(cam.FocalDist)
+	cameraRays[1][1] = forward.Add(deltaX).Add(deltaY).Normalize().Mul(cam.FocalDist)
 
 	for i := 0; i < 2; i++ {
 		for j := 0; j < 2; j++ {
@@ -115,11 +131,17 @@ func (cam *Camera) SetUniforms() {
 		cam.Position.Y(),
 		cam.Position.Z(),
 	)
+
+	gl.Uniform1f(cam.UniformLensRadius, cam.Aperture/2.0)
 }
 
 const (
 	cameraSpeed    = 0.2
 	cameraRotSpeed = 0.05
+	apertureSpeed  = 0.01
+	focalSpeed     = 0.5
+
+	minFocalDist = 0.1
 )
 
 func (cam *Camera) Update() {
@@ -190,6 +212,30 @@ func (cam *Camera) Update() {
 		cam.Lookat = cam.Position.Add(newForward)
 		cam.Up = M.Mul3x1(cam.Up)
 	}
+
+	var dAperture, dFocal float32
+
+	if cam.zoomIn {
+		dFocal += focalSpeed
+	}
+	if cam.zoomOut {
+		dFocal -= focalSpeed
+	}
+	if cam.lensWide {
+		dAperture += apertureSpeed
+	}
+	if cam.lensShrink {
+		dAperture -= apertureSpeed
+	}
+
+	if cam.FocalDist+dFocal >= minFocalDist {
+		cam.FocalDist += dFocal
+	}
+	if cam.Aperture+dAperture >= 0.0 {
+		cam.Aperture += dAperture
+	}
+
+	// cam.Lookat = cam.Lookat.Sub(cam.Position).Normalize().Mul(cam.FocalDist).Add(cam.Position)
 }
 
 func (cam *Camera) AttachToEventHandler(eh *app.EventHandler) {
@@ -206,4 +252,9 @@ func (cam *Camera) AttachToEventHandler(eh *app.EventHandler) {
 	eh.AddOption(glfw.KeyKP4, &cam.rotLeft, app.Hold)
 	eh.AddOption(glfw.KeyKP9, &cam.rotFor, app.Hold)
 	eh.AddOption(glfw.KeyKP7, &cam.rotBack, app.Hold)
+
+	eh.AddOption(glfw.KeyKPAdd, &cam.zoomIn, app.Hold)
+	eh.AddOption(glfw.KeyKPSubtract, &cam.zoomOut, app.Hold)
+	eh.AddOption(glfw.KeyX, &cam.lensWide, app.Hold)
+	eh.AddOption(glfw.KeyZ, &cam.lensShrink, app.Hold)
 }

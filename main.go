@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"image/color"
 	"image/png"
 	"log"
 	"os"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/go-gl/gl/v4.6-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
-	mgl "github.com/go-gl/mathgl/mgl32"
 
 	"github.com/xopoww/go-raytrace/app"
 	"github.com/xopoww/go-raytrace/glutils"
@@ -75,16 +73,8 @@ func main() {
 	log.Println("OpenGL version", version)
 
 	// Init the scene
-	// TODO: from file
-	scene := scenery.NewScene()
-	scene.AddObject(scenery.NewObject(
-		scenery.NewBox(mgl.Vec3{-0.5, 0.0, -0.5}, mgl.Vec3{0.5, 1.0, 0.5}),
-		scenery.NewLambertian(color.RGBA{0xdd, 0xbb, 0xbb, 0xff}),
-	))
-	scene.AddObject(scenery.NewObject(
-		scenery.NewBall(mgl.Vec3{-0.5, 2.0, 0.5}, 1.0),
-		scenery.NewMirror(color.RGBA{0xaa, 0xbb, 0xbb, 0xff}, 0.1),
-	))
+	// TODO: from file option
+	scene := scenery.RandomScene(12345)
 
 	// Create the program with single compute shader
 	// TODO: make paths relative from glsl_scripts folder and automatic prefix generation
