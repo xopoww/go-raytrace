@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"text/template"
 
 	"github.com/go-gl/gl/v4.6-core/gl"
 )
@@ -30,6 +31,23 @@ func NewShaderSource(path string, shaderType uint32) (ShaderSource, error) {
 
 	return ShaderSource{
 		source:     string(data) + "\x00",
+		shaderType: shaderType,
+	}, nil
+}
+
+// Load Go text template from file, inject data into it and create ShaderSource out of the result
+func NewShaderSourceFromTemplate(path string, shaderType uint32, data interface{}) (ShaderSource, error) {
+	tmpl, err := template.ParseFiles(path)
+	if err != nil {
+		return ShaderSource{}, fmt.Errorf("parse template %q: %w", path, err)
+	}
+	bldr := strings.Builder{}
+	err = tmpl.Execute(&bldr, data)
+	if err != nil {
+		return ShaderSource{}, fmt.Errorf("execute template: %w", err)
+	}
+	return ShaderSource{
+		source:     bldr.String() + "\x00",
 		shaderType: shaderType,
 	}, nil
 }
