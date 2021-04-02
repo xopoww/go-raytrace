@@ -34,6 +34,8 @@ type Camera struct {
 	rotDown  bool
 	rotLeft  bool
 	rotRight bool
+	rotFor   bool // rotFor and rotBack are kind of misnomers as it is unclear what a "rotation forward" would be
+	rotBack  bool // they're used just for similarity with moveFor and moveBack
 }
 
 func NewCamera(width, height int) Camera {
@@ -149,7 +151,7 @@ func (cam *Camera) Update() {
 		cam.Lookat = cam.Lookat.Add(deltaVec)
 	}
 
-	var dPhiY, dPhiZ float32
+	var dPhiY, dPhiZ, dPhiX float32
 
 	if cam.rotRight {
 		dPhiY += cameraRotSpeed
@@ -163,16 +165,31 @@ func (cam *Camera) Update() {
 	if cam.rotDown {
 		dPhiZ += cameraRotSpeed
 	}
+	if cam.rotFor {
+		dPhiX -= cameraRotSpeed
+	}
+	if cam.rotBack {
+		dPhiX += cameraRotSpeed
+	}
 
-	Ry := mgl.Rotate3DY(dPhiY)
-	Rz := mgl.Rotate3DZ(dPhiZ)
-	A := cam.transformMatrix()
-	Ainv := A.Inv()
-	M := A.Mul3(Ry).Mul3(Rz).Mul3(Ainv).Transpose()
+	A := mgl.Ident3()
+	if dPhiY != 0.0 {
+		A = A.Mul3(mgl.Rotate3DY(dPhiY))
+	}
+	if dPhiZ != 0.0 {
+		A = A.Mul3(mgl.Rotate3DZ(dPhiZ))
+	}
+	if dPhiX != 0.0 {
+		A = A.Mul3(mgl.Rotate3DX(dPhiX))
+	}
+	if dPhiX != 0.0 || dPhiY != 0.0 || dPhiZ != 0.0 {
+		T := cam.transformMatrix()
+		M := T.Mul3(A).Mul3(T.Inv()).Transpose()
 
-	newForward := M.Mul3x1(cam.Lookat.Sub(cam.Position))
-	cam.Lookat = cam.Position.Add(newForward)
-	cam.Up = M.Mul3x1(cam.Up)
+		newForward := M.Mul3x1(cam.Lookat.Sub(cam.Position))
+		cam.Lookat = cam.Position.Add(newForward)
+		cam.Up = M.Mul3x1(cam.Up)
+	}
 }
 
 func (cam *Camera) AttachToEventHandler(eh *app.EventHandler) {
@@ -187,4 +204,6 @@ func (cam *Camera) AttachToEventHandler(eh *app.EventHandler) {
 	eh.AddOption(glfw.KeyKP2, &cam.rotDown, app.Hold)
 	eh.AddOption(glfw.KeyKP6, &cam.rotRight, app.Hold)
 	eh.AddOption(glfw.KeyKP4, &cam.rotLeft, app.Hold)
+	eh.AddOption(glfw.KeyKP9, &cam.rotFor, app.Hold)
+	eh.AddOption(glfw.KeyKP7, &cam.rotBack, app.Hold)
 }
