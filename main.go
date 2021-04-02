@@ -25,6 +25,10 @@ func init() {
 const (
 	WIDTH  = 640
 	HEIGHT = 480
+
+	MONTE_CARLO_FRAME_COUNT = 20
+	ANTI_ALIASING           = 4
+	MAX_DEPTH               = 5
 )
 
 var (
@@ -78,7 +82,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create comp program: %s", err)
 	}
-	log.Println("Created the comp program")
 
 	// Do the same for the quad shaders
 	vertShaderSrc, err := glutils.NewShaderSource("../glsl_scripts/vert.glsl", gl.VERTEX_SHADER)
@@ -93,15 +96,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create quad program: %s", err)
 	}
-	log.Println("Created the quad program")
 
 	// Init the event handler
 	eventHandler := app.NewEventHandler()
 	window.SetKeyCallback(eventHandler.KeyCallback())
 
-	// Init screenshot handling
 	screenshotRequested := false
 	eventHandler.AddOption(glfw.KeyF3, &screenshotRequested, app.Switch)
+
+	lowGraphics := false
+	eventHandler.AddOption(glfw.KeyP, &lowGraphics, app.Switch)
 
 	// Init the camera
 	camera := scenery.NewCamera(WIDTH, HEIGHT)
@@ -113,26 +117,42 @@ func main() {
 
 	// Get uniform locations from programs
 	gl.UseProgram(compProgram)
-	uniformTime := gl.GetUniformLocation(compProgram, gl.Str("u_time\x00"))
+	uniformTime := glutils.GetUniformLocation(compProgram, "u_time")
+	uniformFrameI := glutils.MustGetUniformLocation(compProgram, "u_frame_i")
+	uniformMCFC := glutils.MustGetUniformLocation(compProgram, "MONTE_CARLO_FRAME_COUNT")
+	uniformAntiAliasing := glutils.MustGetUniformLocation(compProgram, "ANTI_ALIASING")
+	uniformMaxDepth := glutils.MustGetUniformLocation(compProgram, "MAX_DEPTH")
 	camera.GetUniformLocations(compProgram)
 
 	gl.UseProgram(quadProgram)
-	gl.Uniform1i(gl.GetUniformLocation(quadProgram, gl.Str("tex\x00")), 0)
+	gl.Uniform1i(glutils.MustGetUniformLocation(quadProgram, "tex"), 0)
 	gl.UseProgram(0)
 
 	glfw.SetTime(0.0)
+	frame_i := uint32(0)
 	// Main loop
 	for !window.ShouldClose() {
 
 		// Dispatch compute shader program
 		gl.UseProgram(compProgram)
-		// set time
+		// set time and frame index
 		if uniformTime != -1 {
 			gl.Uniform1f(uniformTime, float32(glfw.GetTime()))
 		}
+		if uniformFrameI != -1 {
+			gl.Uniform1ui(uniformFrameI, frame_i)
+		}
 		// update camera uniforms
-		if err := camera.SetUniforms(); err != nil {
-			log.Fatalf("Failed to set camera uniforms: %s", err)
+		camera.SetUniforms()
+		// set graphics options
+		if lowGraphics {
+			gl.Uniform1ui(uniformMCFC, 1)
+			gl.Uniform1ui(uniformAntiAliasing, 1)
+			gl.Uniform1ui(uniformMaxDepth, 2)
+		} else {
+			gl.Uniform1ui(uniformMCFC, MONTE_CARLO_FRAME_COUNT)
+			gl.Uniform1ui(uniformAntiAliasing, ANTI_ALIASING)
+			gl.Uniform1ui(uniformMaxDepth, MAX_DEPTH)
 		}
 		gl.BindTexture(gl.TEXTURE_2D, texture)
 		gl.BindImageTexture(0, texture, 0, false, 0, gl.READ_WRITE, gl.RGBA32F)
@@ -141,13 +161,17 @@ func main() {
 		gl.MemoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT)
 		gl.BindTexture(gl.TEXTURE_2D, 0)
 
+		drawNow := frame_i%MONTE_CARLO_FRAME_COUNT == 0 || lowGraphics
+
 		// Run fullscreen quad rendering program
-		gl.UseProgram(quadProgram)
-		gl.BindVertexArray(vao)
-		gl.BindTexture(gl.TEXTURE_2D, texture)
-		gl.DrawArrays(gl.TRIANGLES, 0, int32(len(quad)/3))
-		gl.BindTexture(gl.TEXTURE_2D, 0)
-		gl.UseProgram(0)
+		if drawNow {
+			gl.UseProgram(quadProgram)
+			gl.BindVertexArray(vao)
+			gl.BindTexture(gl.TEXTURE_2D, texture)
+			gl.DrawArrays(gl.TRIANGLES, 0, int32(len(quad)/3))
+			gl.BindTexture(gl.TEXTURE_2D, 0)
+			gl.UseProgram(0)
+		}
 
 		// Check for errors
 		if err := glutils.CheckError(); err != nil {
@@ -155,7 +179,7 @@ func main() {
 		}
 
 		// Handle screenshot request
-		if screenshotRequested {
+		if screenshotRequested && drawNow {
 			screenshotRequested = false
 
 			img, err := glutils.GetImage(texture, WIDTH, HEIGHT)
@@ -192,5 +216,7 @@ func main() {
 		glfw.PollEvents()
 
 		camera.Update()
+
+		frame_i++
 	}
 }

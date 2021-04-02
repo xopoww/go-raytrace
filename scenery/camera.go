@@ -9,6 +9,7 @@ import (
 	mgl "github.com/go-gl/mathgl/mgl32"
 
 	"github.com/xopoww/go-raytrace/app"
+	"github.com/xopoww/go-raytrace/glutils"
 )
 
 type Camera struct {
@@ -68,34 +69,13 @@ func (cam *Camera) right() mgl.Vec3 {
 func (cam *Camera) GetUniformLocations(program uint32) {
 	for i := 0; i < 2; i++ {
 		for j := 0; j < 2; j++ {
-			cam.UniformRays[i][j] = gl.GetUniformLocation(
-				program,
-				gl.Str(fmt.Sprintf("ray%d%d\x00", i, j)),
-			)
+			cam.UniformRays[i][j] = glutils.MustGetUniformLocation(program, fmt.Sprintf("ray%d%d", i, j))
 		}
 	}
-	cam.UniformEye = gl.GetUniformLocation(program, gl.Str("eye\x00"))
+	cam.UniformEye = glutils.MustGetUniformLocation(program, "eye")
 }
 
-func (cam *Camera) checkUniforms() error {
-	for i := 0; i < 2; i++ {
-		for j := 0; j < 2; j++ {
-			if cam.UniformRays[i][j] == -1 {
-				return fmt.Errorf("uniform location for ray%d%d is -1", i, j)
-			}
-		}
-	}
-	if cam.UniformEye == -1 {
-		return fmt.Errorf("uniform location for eye is -1")
-	}
-	return nil
-}
-
-func (cam *Camera) SetUniforms() error {
-	if err := cam.checkUniforms(); err != nil {
-		return err
-	}
-
+func (cam *Camera) SetUniforms() {
 	var cameraRays [2][2]mgl.Vec3
 	forward := cam.forward()
 	right := cam.right()
@@ -124,8 +104,6 @@ func (cam *Camera) SetUniforms() error {
 		cam.Position.Y(),
 		cam.Position.Z(),
 	)
-
-	return nil
 }
 
 const cameraSpeed = 0.2

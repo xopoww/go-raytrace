@@ -10,9 +10,11 @@ ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
 ivec2 size = imageSize(framebuffer);
 
 uniform float u_time;
+uniform uint u_frame_i;
 
-uniform uint MAX_DEPTH = 7;
-uniform uint ANTI_ALIASING = 4; 
+uniform uint MAX_DEPTH;
+uniform uint ANTI_ALIASING;
+uniform uint MONTE_CARLO_FRAME_COUNT;
 
 
 // ===== Helper structs and functions
@@ -386,5 +388,12 @@ void main(void) {
     vec3 color = trace_ray(ray);
     resulting_color += color / float(ANTI_ALIASING);
   }
-  imageStore(framebuffer, pix, vec4(resulting_color.xyz, 1.0));
+  vec4 prev_color;
+  if (MONTE_CARLO_FRAME_COUNT == 1 || u_frame_i % MONTE_CARLO_FRAME_COUNT == 1) {
+    prev_color = vec4(0.0);
+  } else {
+    prev_color = imageLoad(framebuffer, pix);
+  }
+  prev_color += vec4(resulting_color.xyz, 1.0) / float(MONTE_CARLO_FRAME_COUNT);
+  imageStore(framebuffer, pix, prev_color);
 }

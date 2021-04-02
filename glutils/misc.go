@@ -3,6 +3,7 @@ package glutils
 import (
 	"fmt"
 	"image"
+	"log"
 
 	"github.com/go-gl/gl/v4.6-core/gl"
 )
@@ -28,6 +29,20 @@ func MakeVao(points []float32) uint32 {
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 0, nil)
 	return vao
+}
+
+// Convenience wrapper for gl.GetUniformLocation
+func GetUniformLocation(program uint32, name string) int32 {
+	return gl.GetUniformLocation(program, gl.Str(name+"\x00"))
+}
+
+// Same as GetUniformLocation, but calls log.Fatalf if the returned value is -1
+func MustGetUniformLocation(program uint32, name string) int32 {
+	ul := GetUniformLocation(program, name)
+	if ul == -1 {
+		log.Fatalf("Uniform location for %s is -1", name)
+	}
+	return ul
 }
 
 // Create new empty OpenGL texture with given size
