@@ -29,6 +29,11 @@ type Camera struct {
 	moveRight bool
 	moveFor   bool
 	moveBack  bool
+
+	rotUp    bool
+	rotDown  bool
+	rotLeft  bool
+	rotRight bool
 }
 
 func NewCamera(width, height int) Camera {
@@ -64,6 +69,10 @@ func (cam *Camera) forward() mgl.Vec3 {
 // orthonormal basis associated with the camera
 func (cam *Camera) right() mgl.Vec3 {
 	return cam.forward().Cross(cam.Up).Normalize()
+}
+
+func (cam *Camera) transformMatrix() mgl.Mat3 {
+	return mgl.Mat3FromCols(cam.forward(), cam.Up, cam.right())
 }
 
 func (cam *Camera) GetUniformLocations(program uint32) {
@@ -106,7 +115,10 @@ func (cam *Camera) SetUniforms() {
 	)
 }
 
-const cameraSpeed = 0.2
+const (
+	cameraSpeed    = 0.2
+	cameraRotSpeed = 0.05
+)
 
 func (cam *Camera) Update() {
 	var dX, dY, dZ float32
@@ -136,6 +148,31 @@ func (cam *Camera) Update() {
 		cam.Position = cam.Position.Add(deltaVec)
 		cam.Lookat = cam.Lookat.Add(deltaVec)
 	}
+
+	var dPhiY, dPhiZ float32
+
+	if cam.rotRight {
+		dPhiY += cameraRotSpeed
+	}
+	if cam.rotLeft {
+		dPhiY -= cameraRotSpeed
+	}
+	if cam.rotUp {
+		dPhiZ -= cameraRotSpeed
+	}
+	if cam.rotDown {
+		dPhiZ += cameraRotSpeed
+	}
+
+	Ry := mgl.Rotate3DY(dPhiY)
+	Rz := mgl.Rotate3DZ(dPhiZ)
+	A := cam.transformMatrix()
+	Ainv := A.Inv()
+	M := A.Mul3(Ry).Mul3(Rz).Mul3(Ainv).Transpose()
+
+	newForward := M.Mul3x1(cam.Lookat.Sub(cam.Position))
+	cam.Lookat = cam.Position.Add(newForward)
+	cam.Up = M.Mul3x1(cam.Up)
 }
 
 func (cam *Camera) AttachToEventHandler(eh *app.EventHandler) {
@@ -145,4 +182,9 @@ func (cam *Camera) AttachToEventHandler(eh *app.EventHandler) {
 	eh.AddOption(glfw.KeyA, &cam.moveLeft, app.Hold)
 	eh.AddOption(glfw.KeySpace, &cam.moveUp, app.Hold)
 	eh.AddOption(glfw.KeyLeftShift, &cam.moveDown, app.Hold)
+
+	eh.AddOption(glfw.KeyKP8, &cam.rotUp, app.Hold)
+	eh.AddOption(glfw.KeyKP2, &cam.rotDown, app.Hold)
+	eh.AddOption(glfw.KeyKP6, &cam.rotRight, app.Hold)
+	eh.AddOption(glfw.KeyKP4, &cam.rotLeft, app.Hold)
 }
