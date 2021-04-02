@@ -88,7 +88,7 @@ func main() {
 
 	// Create the program with single compute shader
 	// TODO: make paths relative from glsl_scripts folder and automatic prefix generation
-	compShaderSrc, err := glutils.NewShaderFromTemplate("../glsl_scripts/raytrace_template.glsl", gl.COMPUTE_SHADER, scene)
+	compShaderSrc, err := glutils.NewShaderSourceFromTemplate("../glsl_scripts/raytrace_template.glsl", gl.COMPUTE_SHADER, scene)
 	if err != nil {
 		log.Fatalf("Failed to load compute shader source: %s", err)
 	}
