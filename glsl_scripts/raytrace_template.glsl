@@ -328,16 +328,20 @@ const uint materials[NUM_OBJECTS] = {
   {{end}}
 };
 
-vec3 _scatterMirror(vec3 incident, vec3 normal, float fuzz) {
-  return reflect(incident, normal) + random_in_unit_sphere() * fuzz;
-}
-
 vec3 _scatterLambertian(vec3 normal) {
   vec3 scattered = normal + random_in_unit_sphere();
   if (fleq(length(scattered), 0.0)) {
     scattered = normal;
   }
   return scattered;
+}
+
+vec3 _scatterMirror(vec3 incident, vec3 normal, float fuzz, float eta) {
+  if (random() <= eta) {
+    return reflect(incident, normal) + random_in_unit_sphere() * fuzz;
+  } else {
+    return _scatterLambertian(normal);
+  }
 }
 
 vec3 _scatterGlass(vec3 incident, vec3 normal, float fuzz, float eta) {
@@ -351,7 +355,7 @@ vec3 _scatterGlass(vec3 incident, vec3 normal, float fuzz, float eta) {
 vec3 scatter(vec3 incident, vec3 normal, int oi) {
   switch (materials[oi]) {
   case MirrorMaterial:
-    return _scatterMirror(incident, normal, fuzzs[oi]);
+    return _scatterMirror(incident, normal, fuzzs[oi], etas[oi]);
   case LambertianMaterial:
     return _scatterLambertian(normal);
   case GlassMaterial:
@@ -369,11 +373,10 @@ vec3 scatter(vec3 incident, vec3 normal, int oi) {
 
 // ===== Main tracing functions
 
-vec3 bg_color(vec3 origin, vec3 dir) {
+vec3 bg_color(vec3 dir) {
   float brightness = (dir.y / length(dir) + 1.0) / 2.0;
   return vec3(brightness);
 }
-
 
 ray3 trace_step(ray3 r, out vec3 color) {
   hitinfo i;
@@ -388,7 +391,7 @@ ray3 trace_step(ray3 r, out vec3 color) {
     }
     return ray3(point, normalize(scattered));
   }
-  color = bg_color(r.origin, r.dir);
+  color = bg_color(r.dir);
   return ray3(vec3(0.0), vec3(0.0));
 }
 
@@ -417,7 +420,6 @@ ray3 get_ray(vec2 pos) {
   return ray3(eye + offset, dir);
 }
 
-
 // ===== Main
 
 void main(void) {
@@ -440,5 +442,6 @@ void main(void) {
     prev_color = imageLoad(framebuffer, pix);
   }
   prev_color += vec4(resulting_color.xyz, 1.0) / float(MONTE_CARLO_FRAME_COUNT);
+
   imageStore(framebuffer, pix, prev_color);
 }
