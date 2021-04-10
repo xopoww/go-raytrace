@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"image/png"
+	"io/ioutil"
 	"log"
 	"os"
 	"runtime"
@@ -28,7 +30,7 @@ const (
 
 	MONTE_CARLO_FRAME_COUNT = 20
 	ANTI_ALIASING           = 4
-	MAX_DEPTH               = 5
+	MAX_DEPTH               = 10
 )
 
 var (
@@ -73,8 +75,20 @@ func main() {
 	log.Println("OpenGL version", version)
 
 	// Init the scene
-	// TODO: from file option
-	scene := scenery.RandomScene(12345)
+	scene := scenery.NewScene()
+	file, err := os.Open("scene.json")
+	if err != nil {
+		log.Fatalf("Failed to open scene file: %s", err)
+	}
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("Failed to read scene file: %s", err)
+	}
+	err = json.Unmarshal(data, scene)
+	if err != nil {
+		log.Fatalf("Failed to parse scene file: %s", err)
+	}
+	//scene := scenery.RandomScene(12345)
 
 	// Create the program with single compute shader
 	// TODO: make paths relative from glsl_scripts folder and automatic prefix generation

@@ -1,6 +1,7 @@
 package scenery
 
 import (
+	"encoding/json"
 	"fmt"
 	"image/color"
 	"math"
@@ -20,28 +21,43 @@ type Scene struct {
 	}
 }
 
+func (s *Scene) UnmarshalJSON(data []byte) error {
+	objects := make([]Object, 0)
+	err := json.Unmarshal(data, &objects)
+	if err != nil {
+		return err
+	}
+
+	for _, obj := range objects {
+		s.AddObject(obj)
+	}
+
+	return nil
+}
+
 func NewScene() *Scene {
 	return &Scene{}
 }
 
 func (s *Scene) AddObject(o Object) {
-	s.Data[o.body.kind].Num++
-	s.Data[o.body.kind].Descs = append(s.Data[o.body.kind].Descs, o.body.desc)
-	s.Data[o.body.kind].Colors = append(s.Data[o.body.kind].Colors, colorToString(o.material.color))
-	s.Data[o.body.kind].Materials = append(s.Data[o.body.kind].Materials, o.material.kind)
-	s.Data[o.body.kind].Fuzzs = append(s.Data[o.body.kind].Fuzzs, o.material.fuzz)
-	s.Data[o.body.kind].Etas = append(s.Data[o.body.kind].Etas, o.material.eta)
+	s.Data[o.Body_.kind].Num++
+	s.Data[o.Body_.kind].Descs = append(s.Data[o.Body_.kind].Descs, o.Body_.desc)
+	s.Data[o.Body_.kind].Colors = append(s.Data[o.Body_.kind].Colors, colorToString(o.Material_.color))
+	s.Data[o.Body_.kind].Materials = append(s.Data[o.Body_.kind].Materials, o.Material_.kind)
+	s.Data[o.Body_.kind].Fuzzs = append(s.Data[o.Body_.kind].Fuzzs, o.Material_.fuzz)
+	s.Data[o.Body_.kind].Etas = append(s.Data[o.Body_.kind].Etas, o.Material_.eta)
 }
 
+// TODO: fix field/type naming
 type Object struct {
-	body     Body
-	material Material
+	Body_     Body     `json:"body"`
+	Material_ Material `json:"material"`
 }
 
 func NewObject(body Body, material Material) Object {
 	return Object{
-		body:     body,
-		material: material,
+		Body_:     body,
+		Material_: material,
 	}
 }
 
@@ -66,12 +82,82 @@ type Material struct {
 	eta   float32
 }
 
-func NewMirror(c color.RGBA, fuzz float32) Material {
+func (m *Material) UnmarshalJSON(data []byte) error {
+	dict := make(map[string]interface{})
+	err := json.Unmarshal(data, &dict)
+	if err != nil {
+		return err
+	}
+
+	kindI, found := dict["kind"]
+	if !found {
+		return fmt.Errorf("kind not specified")
+	}
+	kindS, ok := kindI.(string)
+	if !ok {
+		return fmt.Errorf("invalid kind type")
+	}
+	switch kindS {
+	case "mirror":
+		m.kind = Mirror
+	case "lambertian":
+		m.kind = Lambertian
+	case "glass":
+		m.kind = Glass
+	default:
+		return fmt.Errorf("unknown kind: %s", kindS)
+	}
+
+	clrI, found := dict["color"]
+	if !found {
+		return fmt.Errorf("color not specified")
+	}
+	clrS, ok := clrI.(string)
+	if !ok {
+		return fmt.Errorf("invalid color type")
+	}
+	_, err = fmt.Sscanf(clrS, "%02x%02x%02x", &m.color.R, &m.color.G, &m.color.B)
+	if err != nil {
+		return fmt.Errorf("failed to parse color: %w", err)
+	}
+
+	if m.kind != Lambertian {
+		fzI, found := dict["fuzz"]
+		if !found {
+			return fmt.Errorf("fuzz not specified")
+		}
+		fzF, ok := fzI.(float64)
+		if !ok {
+			return fmt.Errorf("invalid fuzz type")
+		}
+		if fzF < 0.0 || fzF > 1.0 {
+			return fmt.Errorf("fuzz must be in range [0, 1]")
+		}
+		m.fuzz = float32(fzF)
+
+		etaI, found := dict["eta"]
+		if !found {
+			return fmt.Errorf("eta not specified")
+		}
+		etaF, ok := etaI.(float64)
+		if !ok {
+			return fmt.Errorf("invalid eta type")
+		}
+		if etaF < 0.0 {
+			return fmt.Errorf("eta must be positive")
+		}
+		m.eta = float32(etaF)
+	}
+
+	return nil
+}
+
+func NewMirror(c color.RGBA, fuzz, eta float32) Material {
 	return Material{
 		kind:  Mirror,
 		color: c,
 		fuzz:  fuzz,
-		eta:   0.0,
+		eta:   eta,
 	}
 }
 
@@ -115,6 +201,106 @@ type Body struct {
 	desc string
 }
 
+func parseBox(dict map[string]interface{}) (string, error) {
+	minI, found := dict["min"]
+	if !found {
+		return "", fmt.Errorf("min not specified")
+	}
+	min, err := vec3FromInterface(minI)
+	if err != nil {
+		return "", fmt.Errorf("min: %w", err)
+	}
+
+	maxI, found := dict["max"]
+	if !found {
+		return "", fmt.Errorf("max not specified")
+	}
+	max, err := vec3FromInterface(maxI)
+	if err != nil {
+		return "", fmt.Errorf("max: %w", err)
+	}
+
+	return fmt.Sprintf(
+		"{{%f, %f, %f},{%f, %f, %f}}",
+		min[0], min[1], min[2],
+		max[0], max[1], max[2],
+	), nil
+}
+
+func vec3FromInterface(i interface{}) ([]float32, error) {
+	arr, ok := i.([]interface{})
+	if !ok || len(arr) != 3 {
+		return nil, fmt.Errorf("not array of length 3")
+	}
+	vec := make([]float32, 3)
+	for j := 0; j < 3; j++ {
+		f, ok := arr[j].(float64)
+		if !ok {
+			return nil, fmt.Errorf("wrong type")
+		}
+		vec[j] = float32(f)
+	}
+	return vec, nil
+}
+
+func parseBall(dict map[string]interface{}) (string, error) {
+	cI, found := dict["center"]
+	if !found {
+		return "", fmt.Errorf("center not specified")
+	}
+	c, err := vec3FromInterface(cI)
+	if err != nil {
+		return "", fmt.Errorf("center: %w", err)
+	}
+
+	rI, found := dict["radius"]
+	if !found {
+		return "", fmt.Errorf("radius not specified")
+	}
+	r, ok := rI.(float64)
+	if !ok {
+		return "", fmt.Errorf("invalid radius type")
+	}
+	if r < 0.0 {
+		return "", fmt.Errorf("radius must be positive")
+	}
+
+	return fmt.Sprintf(
+		"{{%f, %f, %f}, %f}",
+		c[0], c[1], c[2],
+		float32(r),
+	), nil
+}
+
+func (b *Body) UnmarshalJSON(data []byte) error {
+	dict := make(map[string]interface{})
+	err := json.Unmarshal(data, &dict)
+	if err != nil {
+		return err
+	}
+
+	kindI, found := dict["kind"]
+	if !found {
+		return fmt.Errorf("kind not specified")
+	}
+	kindS, ok := kindI.(string)
+	if !ok {
+		return fmt.Errorf("invalid kind type")
+	}
+	switch kindS {
+	case "box":
+		b.kind = Box
+		b.desc, err = parseBox(dict)
+	case "ball":
+		b.kind = Ball
+		b.desc, err = parseBall(dict)
+	default:
+		return fmt.Errorf("unknown kind: %s", kindS)
+	}
+
+	return err
+}
+
 func NewBox(min, max mgl.Vec3) Body {
 	return Body{
 		kind: Box,
@@ -153,7 +339,25 @@ func RandomScene(seed int64) *Scene {
 			mgl.Vec3{maxDist, 0.0, maxDist},
 		),
 		NewLambertian(
-			color.RGBA{0x44, 0x44, 0x44, 0xFF},
+			color.RGBA{0x66, 0x66, 0x66, 0xFF},
+		),
+	))
+	s.AddObject(NewObject(
+		NewBox(
+			mgl.Vec3{-maxDist, 0.0, -maxDist},
+			mgl.Vec3{-maxDist + 1.0, maxDist / 2.0, maxDist},
+		),
+		NewLambertian(
+			color.RGBA{0xDD, 0xDD, 0xDD, 0xFF},
+		),
+	))
+	s.AddObject(NewObject(
+		NewBox(
+			mgl.Vec3{-maxDist, 0.0, maxDist - 1.0},
+			mgl.Vec3{maxDist, maxDist / 2.0, maxDist},
+		),
+		NewLambertian(
+			color.RGBA{0xDD, 0xDD, 0xDD, 0xFF},
 		),
 	))
 	for i := 0; i < nObjects; i++ {
@@ -181,7 +385,7 @@ func RandomScene(seed int64) *Scene {
 		var material Material
 		switch rand.Int() % 3 {
 		case 0:
-			material = NewMirror(clr, rand.Float32())
+			material = NewMirror(clr, rand.Float32(), rand.Float32())
 		case 1:
 			material = NewLambertian(clr)
 		case 2:
