@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"image/png"
 	"io/ioutil"
@@ -24,15 +25,6 @@ func init() {
 	runtime.LockOSThread()
 }
 
-const (
-	WIDTH  = 640
-	HEIGHT = 480
-
-	MONTE_CARLO_FRAME_COUNT = 20
-	ANTI_ALIASING           = 4
-	MAX_DEPTH               = 10
-)
-
 var (
 	quad = []float32{
 		-1, -1, 0, // top
@@ -45,6 +37,31 @@ var (
 )
 
 func main() {
+
+	// Get command line arguments
+	SCENE := flag.String("scene", "", "path to json file with scene description (if not set, a random scene will be generated)")
+	SEED := flag.Int64("seed", -1, "seed for random scene generation (if negative, current UNIX time is used)")
+	WIDTH := flag.Int("width", 640, "screen width in pixels")
+	HEIGHT := flag.Int("height", 480, "scene height in pixels")
+	RESOLUTION := flag.String("resolution", "", "if set, must be one of \"hd\" (1080x720) or \"fullhd\" (1920x1080); overrides width and height options")
+	MONTE_CARLO_FRAME_COUNT := flag.Uint("mcfc", 20, "number of frames for monte carlo denoising")
+	ANTI_ALIASING := flag.Uint("alias", 4, "anti-aliasing parameter")
+	MAX_DEPTH := flag.Uint("depth", 10, "maximum recursion depth for ray tracing")
+
+	flag.Parse()
+
+	switch *RESOLUTION {
+	case "":
+		break
+	case "hd":
+		*WIDTH = 1080
+		*HEIGHT = 720
+	case "fullhd":
+		*WIDTH = 1920
+		*HEIGHT = 1080
+	default:
+		log.Fatalf("unknown resolution option: %s", *RESOLUTION)
+	}
 
 	// Initialize GLFW and GL, create window
 	err := glfw.Init()
@@ -59,7 +76,7 @@ func main() {
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
 
-	window, err := glfw.CreateWindow(WIDTH, HEIGHT, "Go Ray Tracer", nil, nil)
+	window, err := glfw.CreateWindow(*WIDTH, *HEIGHT, "Go Ray Tracer", nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -75,20 +92,29 @@ func main() {
 	log.Println("OpenGL version", version)
 
 	// Init the scene
-	scene := scenery.NewScene()
-	file, err := os.Open("scene.json")
-	if err != nil {
-		log.Fatalf("Failed to open scene file: %s", err)
+	var scene *scenery.Scene
+
+	if *SCENE == "" {
+		if *SEED < 0 {
+			*SEED = time.Now().Unix()
+		}
+		log.Printf("Generating random scene with seed %d", *SEED)
+		scene = scenery.RandomScene(*SEED)
+	} else {
+		scene = scenery.NewScene()
+		file, err := os.Open("scene.json")
+		if err != nil {
+			log.Fatalf("Failed to open scene file: %s", err)
+		}
+		data, err := ioutil.ReadAll(file)
+		if err != nil {
+			log.Fatalf("Failed to read scene file: %s", err)
+		}
+		err = json.Unmarshal(data, scene)
+		if err != nil {
+			log.Fatalf("Failed to parse scene file: %s", err)
+		}
 	}
-	data, err := ioutil.ReadAll(file)
-	if err != nil {
-		log.Fatalf("Failed to read scene file: %s", err)
-	}
-	err = json.Unmarshal(data, scene)
-	if err != nil {
-		log.Fatalf("Failed to parse scene file: %s", err)
-	}
-	//scene := scenery.RandomScene(12345)
 
 	// Create the program with single compute shader
 	// TODO: make paths relative from glsl_scripts folder and automatic prefix generation
@@ -126,12 +152,12 @@ func main() {
 	eventHandler.AddOption(glfw.KeyP, &lowGraphics, app.Switch)
 
 	// Init the camera
-	camera := scenery.NewCamera(WIDTH, HEIGHT)
+	camera := scenery.NewCamera(*WIDTH, *HEIGHT)
 	camera.AttachToEventHandler(eventHandler)
 
 	// Init OpenGL objects
 	vao := glutils.MakeVao(quad)
-	texture := glutils.MakeEmptyTexture(WIDTH, HEIGHT)
+	texture := glutils.MakeEmptyTexture(*WIDTH, *HEIGHT)
 
 	// Get uniform locations from programs
 	gl.UseProgram(compProgram)
@@ -168,18 +194,18 @@ func main() {
 			gl.Uniform1ui(uniformAntiAliasing, 1)
 			gl.Uniform1ui(uniformMaxDepth, 2)
 		} else {
-			gl.Uniform1ui(uniformMCFC, MONTE_CARLO_FRAME_COUNT)
-			gl.Uniform1ui(uniformAntiAliasing, ANTI_ALIASING)
-			gl.Uniform1ui(uniformMaxDepth, MAX_DEPTH)
+			gl.Uniform1ui(uniformMCFC, uint32(*MONTE_CARLO_FRAME_COUNT))
+			gl.Uniform1ui(uniformAntiAliasing, uint32(*ANTI_ALIASING))
+			gl.Uniform1ui(uniformMaxDepth, uint32(*MAX_DEPTH))
 		}
 		gl.BindTexture(gl.TEXTURE_2D, texture)
 		gl.BindImageTexture(0, texture, 0, false, 0, gl.READ_WRITE, gl.RGBA32F)
-		gl.DispatchCompute(WIDTH, HEIGHT, 1) // TODO: add support of other workgroup sizes
+		gl.DispatchCompute(uint32(*WIDTH), uint32(*HEIGHT), 1) // TODO: add support of other workgroup sizes
 		gl.BindImageTexture(0, 0, 0, false, 0, gl.READ_WRITE, gl.RGBA32F)
 		gl.MemoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT)
 		gl.BindTexture(gl.TEXTURE_2D, 0)
 
-		drawNow := frame_i%MONTE_CARLO_FRAME_COUNT == 0 || lowGraphics
+		drawNow := uint(frame_i)%(*MONTE_CARLO_FRAME_COUNT) == 0 || lowGraphics
 
 		// Run fullscreen quad rendering program
 		if drawNow {
@@ -200,10 +226,11 @@ func main() {
 		if screenshotRequested && drawNow {
 			screenshotRequested = false
 
-			img, err := glutils.GetImage(texture, WIDTH, HEIGHT)
+			img, err := glutils.GetImage(texture, *WIDTH, *HEIGHT)
 			if err != nil {
 				log.Printf("Failed to take a screenshot: %s", err)
 			} else {
+				log.Println("Took a screenshot")
 				go func() {
 					flippedImg := glutils.FlipImage(img)
 
