@@ -16,6 +16,11 @@ uniform uint MAX_DEPTH;
 uniform uint ANTI_ALIASING;
 uniform uint MONTE_CARLO_FRAME_COUNT;
 
+layout(binding = 5) buffer SSBO {
+  int lookat_index;
+  float dist_to_lookat;
+};
+
 
 // ===== Helper structs and functions
 
@@ -411,8 +416,8 @@ vec3 trace_ray(ray3 ray) {
   return resulting_color;
 }
 
-ray3 get_ray(vec2 pos) {
-  vec2 eye_shift = random_in_unit_disk().xy * lens_radius;
+ray3 get_ray(vec2 pos, float lr) {
+  vec2 eye_shift = random_in_unit_disk().xy * lr;
   vec3 h = normalize(ray11 - ray01);
   vec3 v = normalize(ray11 - ray10);
   vec3 offset = eye_shift.x * h + eye_shift.y * v;
@@ -426,12 +431,23 @@ void main(void) {
   if (pix.x >= size.x || pix.y >= size.y) {
     return;
   }
+  if (pix == size / 2) {
+    ray3 center_ray = get_ray(vec2(0.5), 0.0);
+    hitinfo i;
+    if (intersectObjects(center_ray.origin, center_ray.dir, i)) {
+      lookat_index = i.oi;
+      dist_to_lookat = i.lambda.x * length(center_ray.dir);
+    } else {
+      lookat_index = -1;
+      dist_to_lookat = 0.0;
+    }
+  }
 
   vec3 resulting_color = vec3(0.0);
   for (int i = 0; i < ANTI_ALIASING; i++) {
     vec2 shift = vec2(random(), random());
     vec2 pos = (vec2(pix) + shift) / vec2(size.x, size.y);
-    ray3 ray = get_ray(pos);
+    ray3 ray = get_ray(pos, lens_radius);
     vec3 color = trace_ray(ray);
     resulting_color += color / float(ANTI_ALIASING);
   }

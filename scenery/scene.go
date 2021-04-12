@@ -21,6 +21,34 @@ type Scene struct {
 	}
 }
 
+func (s *Scene) GetObjectDesription(index int32) string {
+	if index == -1 {
+		return "nothing"
+	}
+
+	for body, data := range s.Data {
+		if index >= int32(data.Num) {
+			index -= int32(data.Num)
+			continue
+		}
+
+		bodyS := [...]string{"box", "ball"}[body]
+		materialS := [...]string{"mirror", "lambertian", "glass"}[data.Materials[index]]
+
+		result := fmt.Sprintf("a %s %s with (color = %s", materialS, bodyS, data.Colors[index])
+		if data.Materials[index] != Lambertian {
+			result += fmt.Sprintf(
+				", eta = %f, fuzz = %f",
+				data.Etas[index],
+				data.Fuzzs[index],
+			)
+		}
+		return result + ")"
+	}
+
+	return "[invalid object index]"
+}
+
 func (s *Scene) UnmarshalJSON(data []byte) error {
 	objects := make([]Object, 0)
 	err := json.Unmarshal(data, &objects)

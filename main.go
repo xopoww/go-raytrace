@@ -151,6 +151,12 @@ func main() {
 	lowGraphics := false
 	eventHandler.AddOption(glfw.KeyP, &lowGraphics, app.Switch)
 
+	infoRequested := false
+	eventHandler.AddOption(glfw.KeyI, &infoRequested, app.Switch)
+
+	focusRequested := false
+	eventHandler.AddOption(glfw.KeyF, &focusRequested, app.Switch)
+
 	// Init the camera
 	camera := scenery.NewCamera(*WIDTH, *HEIGHT)
 	camera.AttachToEventHandler(eventHandler)
@@ -158,6 +164,18 @@ func main() {
 	// Init OpenGL objects
 	vao := glutils.MakeVao(quad)
 	texture := glutils.MakeEmptyTexture(*WIDTH, *HEIGHT)
+
+	var (
+		ssbo         uint32
+		lookatIndex  int32
+		distToLookat float32
+	)
+
+	gl.GenBuffers(1, &ssbo)
+	gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, ssbo)
+	gl.BufferData(gl.SHADER_STORAGE_BUFFER, 8, nil, gl.DYNAMIC_READ)
+	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 5, ssbo)
+	gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, 0)
 
 	// Get uniform locations from programs
 	gl.UseProgram(compProgram)
@@ -202,7 +220,7 @@ func main() {
 		gl.BindImageTexture(0, texture, 0, false, 0, gl.READ_WRITE, gl.RGBA32F)
 		gl.DispatchCompute(uint32(*WIDTH), uint32(*HEIGHT), 1) // TODO: add support of other workgroup sizes
 		gl.BindImageTexture(0, 0, 0, false, 0, gl.READ_WRITE, gl.RGBA32F)
-		gl.MemoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT)
+		gl.MemoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT | gl.BUFFER_UPDATE_BARRIER_BIT)
 		gl.BindTexture(gl.TEXTURE_2D, 0)
 
 		drawNow := uint(frame_i)%(*MONTE_CARLO_FRAME_COUNT) == 0 || lowGraphics
@@ -255,6 +273,35 @@ func main() {
 					log.Printf("Saved a screenshot as %q", filename)
 				}()
 			}
+		}
+
+		// Handle info request
+		if infoRequested {
+			gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, ssbo)
+			gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, 4, gl.Ptr(&lookatIndex))
+			gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 4, 4, gl.Ptr(&distToLookat))
+			gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, 0)
+
+			log.Printf("You are looking at %s", scene.GetObjectDesription(lookatIndex))
+
+			infoRequested = false
+		}
+
+		// Handle autofocus
+		if focusRequested {
+			gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, ssbo)
+			gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, 4, gl.Ptr(&lookatIndex))
+			gl.GetBufferSubData(gl.SHADER_STORAGE_BUFFER, 4, 4, gl.Ptr(&distToLookat))
+			gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, 0)
+
+			if lookatIndex != -1 {
+				camera.FocalDist = distToLookat
+				log.Printf("Focused at the object you are looking at (F = %f)", distToLookat)
+			} else {
+				log.Println("Cannot autofocus on nothing")
+			}
+
+			focusRequested = false
 		}
 
 		window.SwapBuffers()
