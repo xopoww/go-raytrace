@@ -2,8 +2,6 @@ package glutils
 
 import (
 	"fmt"
-	"io/ioutil"
-	"os"
 	"strings"
 	"text/template"
 
@@ -17,29 +15,18 @@ type ShaderSource struct {
 	shaderType uint32
 }
 
-// Load shader source code from text file
-func NewShaderSource(path string, shaderType uint32) (ShaderSource, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return ShaderSource{}, fmt.Errorf("source file %q not found on disk: %w", path, err)
-	}
-
-	data, err := ioutil.ReadAll(file)
-	if err != nil {
-		return ShaderSource{}, fmt.Errorf("failed to read from the file: %w", err)
-	}
-
+func NewShaderSource(source string, shaderType uint32) ShaderSource {
 	return ShaderSource{
-		source:     string(data) + "\x00",
+		source:     source + "\x00",
 		shaderType: shaderType,
-	}, nil
+	}
 }
 
-// Load Go text template from file, inject data into it and create ShaderSource out of the result
-func NewShaderSourceFromTemplate(path string, shaderType uint32, data interface{}) (ShaderSource, error) {
-	tmpl, err := template.ParseFiles(path)
+// Create ShaderSource from go template source by injecting data into it
+func NewShaderSourceFromTemplate(name, source string, shaderType uint32, data interface{}) (ShaderSource, error) {
+	tmpl, err := template.New(name).Parse(source)
 	if err != nil {
-		return ShaderSource{}, fmt.Errorf("parse template %q: %w", path, err)
+		return ShaderSource{}, fmt.Errorf("parse template %q: %w", name, err)
 	}
 	bldr := strings.Builder{}
 	err = tmpl.Execute(&bldr, data)

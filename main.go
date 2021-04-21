@@ -17,6 +17,7 @@ import (
 	"github.com/xopoww/go-raytrace/app"
 	"github.com/xopoww/go-raytrace/glutils"
 	"github.com/xopoww/go-raytrace/scenery"
+	"github.com/xopoww/go-raytrace/shaders"
 )
 
 func init() {
@@ -102,9 +103,9 @@ func main() {
 		scene = scenery.RandomScene(*SEED)
 	} else {
 		scene = scenery.NewScene()
-		file, err := os.Open("scene.json")
+		file, err := os.Open(*SCENE)
 		if err != nil {
-			log.Fatalf("Failed to open scene file: %s", err)
+			log.Fatalf("Failed to open scene file %q: %s", *SCENE, err)
 		}
 		data, err := ioutil.ReadAll(file)
 		if err != nil {
@@ -117,8 +118,7 @@ func main() {
 	}
 
 	// Create the program with single compute shader
-	// TODO: make paths relative from glsl_scripts folder and automatic prefix generation
-	compShaderSrc, err := glutils.NewShaderSourceFromTemplate("../glsl_scripts/raytrace_template.glsl", gl.COMPUTE_SHADER, scene)
+	compShaderSrc, err := glutils.NewShaderSourceFromTemplate("comp", shaders.Comp, gl.COMPUTE_SHADER, scene)
 	if err != nil {
 		log.Fatalf("Failed to load compute shader source: %s", err)
 	}
@@ -128,14 +128,8 @@ func main() {
 	}
 
 	// Do the same for the quad shaders
-	vertShaderSrc, err := glutils.NewShaderSource("../glsl_scripts/vert.glsl", gl.VERTEX_SHADER)
-	if err != nil {
-		log.Fatalf("Failed to load vertex shader source: %s", err)
-	}
-	fragShaderSrc, err := glutils.NewShaderSource("../glsl_scripts/frag.glsl", gl.FRAGMENT_SHADER)
-	if err != nil {
-		log.Fatalf("Failed to load vertex shader source: %s", err)
-	}
+	vertShaderSrc := glutils.NewShaderSource(shaders.Vert, gl.VERTEX_SHADER)
+	fragShaderSrc := glutils.NewShaderSource(shaders.Frag, gl.FRAGMENT_SHADER)
 	quadProgram, err := glutils.CreateProgram(vertShaderSrc, fragShaderSrc)
 	if err != nil {
 		log.Fatalf("Failed to create quad program: %s", err)
