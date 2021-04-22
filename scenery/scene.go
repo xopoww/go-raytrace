@@ -18,6 +18,8 @@ type Scene struct {
 		Materials []MaterialKind
 		Fuzzs     []float32
 		Etas      []float32
+
+		Names []string
 	}
 }
 
@@ -35,7 +37,12 @@ func (s *Scene) GetObjectDesription(index int32) string {
 		bodyS := [...]string{"box", "ball"}[body]
 		materialS := [...]string{"mirror", "lambertian", "glass"}[data.Materials[index]]
 
-		result := fmt.Sprintf("a %s %s with (color = %s", materialS, bodyS, data.Colors[index])
+		nameS := data.Names[index]
+		if nameS != "" {
+			nameS = "(" + nameS + ") "
+		}
+
+		result := fmt.Sprintf("a %s %s %s(color = %s", materialS, bodyS, nameS, data.Colors[index])
 		if data.Materials[index] != Lambertian {
 			result += fmt.Sprintf(
 				", eta = %f, fuzz = %f",
@@ -74,18 +81,21 @@ func (s *Scene) AddObject(o Object) {
 	s.Data[o.Body_.kind].Materials = append(s.Data[o.Body_.kind].Materials, o.Material_.kind)
 	s.Data[o.Body_.kind].Fuzzs = append(s.Data[o.Body_.kind].Fuzzs, o.Material_.fuzz)
 	s.Data[o.Body_.kind].Etas = append(s.Data[o.Body_.kind].Etas, o.Material_.eta)
+	s.Data[o.Body_.kind].Names = append(s.Data[o.Body_.kind].Names, o.Name)
 }
 
 // TODO: fix field/type naming
 type Object struct {
 	Body_     Body     `json:"body"`
 	Material_ Material `json:"material"`
+	Name      string   `json:"name"`
 }
 
 func NewObject(body Body, material Material) Object {
 	return Object{
 		Body_:     body,
 		Material_: material,
+		Name:      "",
 	}
 }
 
