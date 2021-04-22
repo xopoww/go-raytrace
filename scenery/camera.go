@@ -45,6 +45,8 @@ type Camera struct {
 	zoomOut    bool
 	lensWide   bool
 	lensShrink bool
+	fovUp      bool
+	fovDown    bool
 }
 
 func NewCamera(width, height int) Camera {
@@ -52,7 +54,7 @@ func NewCamera(width, height int) Camera {
 		Position: mgl.Vec3{3.0, 2.0, 7.0},
 		Lookat:   mgl.Vec3{-2.0, 0.5, 0.0},
 		Up:       mgl.Vec3{0.0, 1.0, 0.0},
-		FOV:      120.0,
+		FOV:      90.0,
 		Ratio:    float32(width) / float32(height),
 
 		Aperture:  0.5,
@@ -140,6 +142,7 @@ const (
 	cameraRotSpeed = 0.05
 	apertureSpeed  = 0.01
 	focalSpeed     = 0.5
+	fovSpeed       = 1.0
 
 	minFocalDist = 0.1
 )
@@ -235,7 +238,16 @@ func (cam *Camera) Update() {
 		cam.Aperture += dAperture
 	}
 
-	// cam.Lookat = cam.Lookat.Sub(cam.Position).Normalize().Mul(cam.FocalDist).Add(cam.Position)
+	var dFOV float32
+	if cam.fovUp {
+		dFOV += fovSpeed
+	}
+	if cam.fovDown {
+		dFOV -= fovSpeed
+	}
+	if 5.0 < cam.FOV+dFOV && cam.FOV+dFOV < 180.0 {
+		cam.FOV += dFOV
+	}
 }
 
 func (cam *Camera) AttachToEventHandler(eh *app.EventHandler) {
@@ -257,4 +269,6 @@ func (cam *Camera) AttachToEventHandler(eh *app.EventHandler) {
 	eh.AddOption(glfw.KeyKPSubtract, &cam.zoomOut, app.Hold)
 	eh.AddOption(glfw.KeyX, &cam.lensWide, app.Hold)
 	eh.AddOption(glfw.KeyZ, &cam.lensShrink, app.Hold)
+	eh.AddOption(glfw.KeyV, &cam.fovUp, app.Hold)
+	eh.AddOption(glfw.KeyC, &cam.fovDown, app.Hold)
 }
