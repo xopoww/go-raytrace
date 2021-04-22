@@ -1,0 +1,139 @@
+[
+    {
+        "body": {
+            "kind": "box",
+            "min": [0.0, -1.0, 0.0],
+            "max": [100.0, 0.0, 100.0]
+        },
+        "material": {
+            "kind": "lambertian",
+            "color": "afaaaa"
+        },
+        "name": "Floor"
+    },
+    {
+        "body": {
+            "kind": "box",
+            "min": [0.0, 0.0, -0.5],
+            "max": [100.0, 75.0, 0.0]
+        },
+        "material": {
+            "kind": "mirror",
+            "color": "fffff6",
+            "fuzz": 0.01,
+            "eta": 0.1
+        },
+        "name": "Z-Wall"
+    },
+    {
+        "body": {
+            "kind": "box",
+            "min": [-0.5, 0.0, 0.0],
+            "max": [0.0, 75.0, 100.0]
+        },
+        "material": {
+            "kind": "mirror",
+            "color": "fffff6",
+            "fuzz": 0.01,
+            "eta": 0.1
+        },
+        "name": "X-Wall"
+    },
+
+    {
+        "body": {
+            "kind": "box",
+            "min": [30.0, 0.0, 30.0],
+            "max": [35.0, 10.0, 35.0]
+        },
+        "material": {
+            "kind": "lambertian",
+            "color": "55124f"
+        }
+    },
+    {
+        "body": {
+            "kind": "box",
+            "min": [65.0, 0.0, 65.0],
+            "max": [70.0, 10.0, 70.0]
+        },
+        "material": {
+            "kind": "lambertian",
+            "color": "55124f"
+        }
+    },
+    {
+        "body": {
+            "kind": "box",
+            "min": [30.0, 0.0, 65.0],
+            "max": [35.0, 10.0, 70.0]
+        },
+        "material": {
+            "kind": "lambertian",
+            "color": "55124f"
+        }
+    },
+    {
+        "body": {
+            "kind": "box",
+            "min": [65.0, 0.0, 30.0],
+            "max": [70.0, 10.0, 35.0]
+        },
+        "material": {
+            "kind": "lambertian",
+            "color": "55124f"
+        }
+    },
+    {
+        "body": {
+            "kind": "box",
+            "min": [28.0, 10.0, 28.0],
+            "max": [72.0, 11.0, 72.0]
+        },
+        "material": {
+            "kind": "lambertian",
+            "color": "ddffff"
+        },
+        "name": "Table"
+    },
+
+    {
+        "body": {
+            "kind": "ball",
+            "center": [50.0, 14.0, 55.0],
+            "radius": 3.0
+        },
+        "material": {
+            "kind": "mirror",
+            "color": "dda054",
+            "fuzz": 0.8,
+            "eta": 0.25
+        }
+    },
+    {
+        "body": {
+            "kind": "ball",
+            "center": [45.0, 16.0, 47.0],
+            "radius": 5.0
+        },
+        "material": {
+            "kind": "mirror",
+            "color": "579a23",
+            "fuzz": 0.03,
+            "eta": 0.9
+        }
+    },
+    {
+        "body": {
+            "kind": "box",
+            "min": [52.5, 11.0, 48.0],
+            "max": [55.5, 17.0, 51.0]
+        },
+        "material": {
+            "kind": "glass",
+            "color": "f4f4f4",
+            "fuzz": 0.01,
+            "eta": 1.4
+        }
+    }
+]
