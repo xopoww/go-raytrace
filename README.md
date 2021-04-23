@@ -27,6 +27,6 @@
 * OpenGL 4.6 Core
 * additional dependencies for the [go-gl/glfw](https://github.com/go-gl/glfw) package
 
-After cloning the repository and installing all dependencies just navigate to the root folder of the repo and run `go build`.
+After cloning the repository and installing all dependencies just navigate to the root folder of the repo and run `go build`. Help on how to use the app can be found in `controls.txt` file and via `./go-raytrace -help`.
 
 *The application has been tested only on Linux Mint, so any feedback on compatability is appreciated.*

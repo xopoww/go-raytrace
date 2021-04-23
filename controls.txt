@@ -1,0 +1,11 @@
+=== This is not a setings file, just a manual ===
+
+W/S, A/D, Space/lShift to move
+NUM8/NUM2, NUM4/NUM6, NUM7/NUM9 to rotate camera up/down, left/right and around the view axis
+Z/X to decrease/increase the aperture
+C/V to zoom in/out
+NUM+/NUM- to increase/decrease focal distance
+P to switch between "pretty" (nice graphics, very low fps) and "lowest" (ugly graphics, acceptable fps) modes
+F3 to take a screenshot
+I to get an info about an object you are looking at (the info is printed to the console)
+F to auto-focus on the object you are looking at (might focus a little bit closer than the object)
