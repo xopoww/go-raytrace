@@ -310,7 +310,10 @@ func main() {
 			focusRequested = false
 		}
 
-		window.SwapBuffers()
+		if drawNow {
+			window.SwapBuffers()
+		}
+		
 		glfw.PollEvents()
 
 		camera.Update()
