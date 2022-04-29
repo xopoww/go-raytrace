@@ -186,8 +186,17 @@ func main() {
 
 	glfw.SetTime(0.0)
 	frame_i := uint32(0)
+
+	highGraphicsEnabledFrame := -1
 	// Main loop
 	for !window.ShouldClose() {
+
+		if !lowGraphics && highGraphicsEnabledFrame < 0 {
+			highGraphicsEnabledFrame = int(frame_i)
+		}
+		if lowGraphics && highGraphicsEnabledFrame >= 0 {
+			highGraphicsEnabledFrame = -1
+		}
 
 		// Dispatch compute shader program
 		gl.UseProgram(compProgram)
@@ -218,6 +227,9 @@ func main() {
 		gl.BindTexture(gl.TEXTURE_2D, 0)
 
 		drawNow := uint(frame_i)%(*MONTE_CARLO_FRAME_COUNT) == 0 || lowGraphics
+		if drawNow && frame_i - uint32(highGraphicsEnabledFrame) < uint32(*MONTE_CARLO_FRAME_COUNT) {
+			drawNow = false
+		}
 
 		// Run fullscreen quad rendering program
 		if drawNow {
